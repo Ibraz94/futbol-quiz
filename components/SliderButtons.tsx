@@ -1,7 +1,7 @@
 "use client";
 
 import { useSwiper } from "swiper/react";  
-import {PiCaretLeftBold, PiCaretRightBold } from "react-icons/pi";
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 interface SliderButtonsProps {
     containerStyles: string;
@@ -14,10 +14,10 @@ const SliderButtons = ({ containerStyles, btnStyles, iconStyles }: SliderButtons
     return (
         <div className={containerStyles}>
             <button className={btnStyles} onClick={()=> swiper.slidePrev()}>
-            <PiCaretLeftBold className={iconStyles}/>
+            <ArrowLeft className={iconStyles} strokeWidth={1.5}/>
             </button>
             <button className={btnStyles} onClick={()=> swiper.slideNext()}>
-            <PiCaretRightBold className={iconStyles}/>
+            <ArrowRight className={iconStyles} strokeWidth={1.5}/>
             </button>
         </div>
 

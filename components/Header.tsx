@@ -1,8 +1,12 @@
+'use client'
+
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { ArrowRightToLine, MessageSquarePlus, Trophy } from "lucide-react";
 import Nav from "./Nav";
 import MobileNav from "./MobileNav";
+import { motion } from "framer-motion";
+import Image from "next/image";
 
 const Header = () => {
   return (
