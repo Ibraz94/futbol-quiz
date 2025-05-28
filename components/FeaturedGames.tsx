@@ -40,12 +40,12 @@ export default function Games() {
     setProject(featuredGames[currentIndex])
   }
   return (
-    <div className='bg-gradient-to-b from-gray-900 to-black h-screen'>
+    <div className='bg-gradient-to-b from-gray-900 to-black '>
     <motion.div initial={{ opacity: 0 }}
       animate={{
         opacity: 1,
         transition: { delay: 2.4, duration: 0.4, ease: "easeIn" },
-      }} className='min-h-[80vh] container mx-auto flex flex-col justify-center items-center py-12 xl:px-0 '>
+      }} className='container mx-auto flex flex-col justify-center items-center py-12 xl:px-0 '>
         <div className='w-full xl:w-[90%]'>
       <div className='flex items-center justify-between'>
         <div className='flex flex-col mb-12 xl:w-max xl:justify-none space-y-[-12px]'>
