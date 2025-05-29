@@ -3,6 +3,7 @@ import {  Bai_Jamjuree } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import PageTransition from "@/components/PageTransition";
+import Footer from "@/components/Footer";
 
 
 const BaiJamjuree = Bai_Jamjuree({ 
@@ -30,10 +31,7 @@ export default function RootLayout({
           <PageTransition>{children}
 
           </PageTransition>
-
-
-
-        
+          <Footer/>
       </body>
     </html>
   );

@@ -65,7 +65,7 @@ const Leaderboards = () => {
       <h1 className="text-center text-[50px] font-semibold">Quiz Games Leaderboard</h1>
       <p className="text-center font-light text-base">Check out our top players who have mastered the casino-style games and claimed their spot at the top!<br /> Compete with others to see if you can climb the ranks and become the ultimate champion.</p>
       <div className="w-[1290px] bg-[#2F265380] rounded-[20px] mt-[50px] border border-white/10">
-        <div className='bg-[#3707FC] sticky top-0 rounded-t-[20px] z-10'>
+        <div className='bg-[#3707FC] rounded-t-[20px] z-10'>
           <tr className='text-2xl font-light uppercase flex items-center justify-between px-16 py-6'>
             <th className="flex-1 text-left">username</th>
             <th className="flex-1 text-center">Games</th>

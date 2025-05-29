@@ -4,6 +4,7 @@ import FeaturedGames from "@/components/FeaturedGames";
 import HeroSection from "@/components/HeroSection";
 import Information from "@/components/Information";
 import Leaderboard from "@/components/LeaderBoard";
+import Experience from "@/components/Experience";
 
 const Home = () => {
   return (
@@ -19,6 +20,9 @@ const Home = () => {
         </div>
         <div className="">
           <Leaderboard/>
+        </div>
+        <div className="mt-52">
+          <Experience/>
         </div>
     </div>
   );
