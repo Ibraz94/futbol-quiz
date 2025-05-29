@@ -66,11 +66,11 @@ const Leaderboards = () => {
       <p className="text-center font-light text-base">Check out our top players who have mastered the casino-style games and claimed their spot at the top!<br /> Compete with others to see if you can climb the ranks and become the ultimate champion.</p>
       <div className="w-[1290px] bg-[#2F265380] rounded-[20px] mt-[50px] border border-white/10">
         <div className='bg-[#3707FC] rounded-t-[20px] z-10'>
-          <tr className='text-2xl font-light uppercase flex items-center justify-between px-16 py-6'>
-            <th className="flex-1 text-left">username</th>
-            <th className="flex-1 text-center">Games</th>
-            <th className="flex-1 text-center">Now Playing</th>
-          </tr>
+          <div className='text-2xl font-medium uppercase flex items-center justify-between px-16 py-6'>
+            <div className="flex-1 text-left">username</div>
+            <div className="flex-1 text-center">Games</div>
+            <div className="flex-1 text-center">Now Playing</div>
+          </div>
         </div>
         <div className="max-h-[550px] overflow-y-auto scrollbar-thin scrollbar-thumb-purple scrollbar-track-dark pr-2">
           {leaderboard.map((item, index) => (

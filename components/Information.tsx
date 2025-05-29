@@ -27,7 +27,8 @@ const information = [
 const Services = () => {
   return (
     <section className="relative min-h-[80vh] flex flex-col justify-center py-12 xl:py-0 overflow-hidden">
-      <div className="w-[184px] h-[184px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[130px] absolute top-48 right-80"></div>
+      <div className="w-[184px] h-[184px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[150px] absolute top-36 right-96"></div>
+      <div className="w-[180px] h-[180px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[150px] absolute top-[450px] left-80"></div>
       <h2 className="text-center text-base font-normal text-accent uppercase">Information</h2>
       <h1 className="text-center text-[50px] font-semibold">Why Us Play Matchup</h1>
       <p className="text-center font-light text-base">At Hazard, we provide thousands of players with the best gambling activities and discreet gaming<br /> experience of online casinos while creating a safe place to play.</p>

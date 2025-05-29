@@ -7,7 +7,7 @@ import Image from "next/image";
 
 const HeroSection = () => {
     return (
-        <section className="relative h-screen overflow-hidden bg-black/60">
+        <section className="relative h-dvh overflow-hidden bg-gradient-to-b from-[#111827] to-black">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -30,7 +30,7 @@ const HeroSection = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 1, delay: 2.5 }}
-                className="w-[1198px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2 mix-blend-plus-lighter"
+                className="w-[1198px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2 mix-blend-plus-overlay"
             >
                 <Image src="/Hero.png" alt="hero-image" fill className="object-cover" />
             </motion.div>
@@ -38,7 +38,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-680px", y: "00px" }}
                 animate={{ opacity: 1, x: "-750px", y: "00px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/box-1.png" alt="box-1" width={25} height={10} className="absolute top-10 right-1" />
@@ -47,7 +47,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-450px", y: "500px" }}
                 animate={{ opacity: 1, x: "-700px", y: "00px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-32 left-44" />
@@ -56,7 +56,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-600px", y: "100px" }}
                 animate={{ opacity: 1, x: "-700px", y: "00px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute -bottom-14 left-1/2" />
@@ -65,7 +65,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-660px", y: "00px" }}
                 animate={{ opacity: 1, x: "-780px", y: "-40px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/circle.png" alt="circle" width={50} height={50} className="absolute -bottom-14 -right-28" />
@@ -74,7 +74,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-900px", y: "00px" }}
                 animate={{ opacity: 1, x: "-780px", y: "00px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/circle.png" alt="circle" width={50} height={50} className="absolute top-6 right-[400px] opacity-30" />
@@ -83,7 +83,7 @@ const HeroSection = () => {
             <motion.div
                 initial={{ opacity: 0, x: "-790px", y: "00px" }}
                 animate={{ opacity: 1, x: "-690px", y: "00px" }}
-                transition={{ duration: 1, delay: 3.5, ease: "easeInOut" }}
+                transition={{ duration: 1, delay: 2.5, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
                 <Image src="/circle-2.png" alt="circle-2" width={180} height={100} className="absolute top-32 -left-36" />

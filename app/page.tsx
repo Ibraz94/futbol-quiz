@@ -11,16 +11,16 @@ import Testimonials from "@/components/Testimonials";
 const Home = () => {
   return (
     <div className="relative bg-gradient-to-b from-[#111827] to-black" >
-        <div className="min-h-screen">
+        <div className="">
           <HeroSection/>
         </div>
-        <div className="mt-12">
+        <div className="">
           <FeaturedGames/>
         </div>
         <div className="">
           <Information/>
         </div>
-        <div className="">
+        <div className="mt-12">
           <Leaderboard/>
         </div>
         <div className="mt-52">
