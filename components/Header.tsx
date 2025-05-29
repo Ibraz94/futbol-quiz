@@ -24,13 +24,13 @@ const Header = () => {
 
         {/* Desktop Nav */}
         <div className="hidden xl:flex items-center gap-8">
-          <Link href="/leaderboard">
+          <Link href="">
             <h1 className="text-base font-normal flex gap-2">
               <span><Trophy strokeWidth={1}/></span>
               Lider Tablosu</h1>
           </Link>
 
-          <Link href="/feedback">
+          <Link href="">
             <div className="border w-[150px] h-8 rounded-[4px] flex justify-center items-center">
               <h1 className="text-base font-light flex gap-2 items-center justify-center">
                 <span><MessageSquarePlus strokeWidth={1}/></span>
@@ -38,7 +38,7 @@ const Header = () => {
             </div>
           </Link>
 
-          <Link href="/login">
+          <Link href="">
             <h1 className="text-base font-normal flex gap-2">
               <span><ArrowRightToLine strokeWidth={1}/></span>
               Giris Yap</h1>

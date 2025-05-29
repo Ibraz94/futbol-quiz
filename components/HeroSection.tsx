@@ -7,7 +7,7 @@ import Image from "next/image";
 
 const HeroSection = () => {
     return (
-        <section className="relative h-screen overflow-hidden 'bg-gradient-to-b from-gray-900 to-black">
+        <section className="relative h-screen overflow-hidden bg-black/60">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

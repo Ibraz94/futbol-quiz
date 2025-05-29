@@ -14,7 +14,7 @@ const Home = () => {
         <div className="min-h-screen">
           <HeroSection/>
         </div>
-        <div className="">
+        <div className="mt-12">
           <FeaturedGames/>
         </div>
         <div className="">
@@ -26,7 +26,7 @@ const Home = () => {
         <div className="mt-52">
           <Experience/>
         </div>
-        <div className="mt-20 mb-20">
+        <div className="mt-">
           <Testimonials/>
         </div>
     </div>

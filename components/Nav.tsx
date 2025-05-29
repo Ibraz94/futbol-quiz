@@ -11,15 +11,15 @@ const links = [
   },
   {
     name: 'ABOUT',
-    path: "/about"
+    path: ""
   },
   {
     name: 'GAMES',
-    path: "/games"
+    path: ""
   },
   {
     name: 'LIVE',
-    path: "/live"
+    path: ""
   },
 ];
 

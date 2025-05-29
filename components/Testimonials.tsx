@@ -71,10 +71,9 @@ const Testimonials = () => {
     };
 
     return (
-        <section className="py-20 relative overflow-hidden">
+        <section className="relative overflow-hidden py-44">
             {/* Background decorative elements */}
             <div className="absolute inset-0  from-blue-900/20 via-transparent to-transparent"></div>
-
             <div className="container mx-auto px-6 relative z-10">
                 {/* Header */}
                 <div className="text-center mb-16">

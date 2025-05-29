@@ -54,7 +54,7 @@ export default function Games() {
   };
 
   return (
-    <div className='bg-gradient-to-b from-gray-900 to-black '>
+    <div className=''>
     <motion.div initial={{ opacity: 0 }}
       animate={{
         opacity: 1,
