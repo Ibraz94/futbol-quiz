@@ -7,7 +7,7 @@ import Image from "next/image";
 
 const HeroSection = () => {
     return (
-        <section>
+        <section className="relative h-screen overflow-hidden 'bg-gradient-to-b from-gray-900 to-black">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -21,7 +21,7 @@ const HeroSection = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 1, delay: 2 }}
-                className="h-full absolute mix-blend-plus-lighter top-[400px] left-0 w-full"
+                className="h-full absolute mix-blend-plus-lighter top-[350px] left-0 w-full"
             >
                 <Image src="/smoke.png" alt="smoke" fill className="object-cover" />
             </motion.div>
@@ -122,13 +122,13 @@ const HeroSection = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 1, delay: 2.5 }}
-                className="flex flex-col items-center justify-center pt-[180px] space-y-[-30px]"
+                className="relative flex flex-col items-center justify-center h-full space-y-[-20px] z-10 bottom-24"
             >
                 <h1 className="text-6xl font-medium">Daily Quiz, Daily Bonus</h1>
                 <h1 className="text-[90px] font-medium">Play Today!</h1>
                 <div className="flex flex-col items-center justify-center pt-2">
                     <p className="text-xl font-light text-center">Lorem ipsum dolor sit amet, consectetuer adipiscing elit.<br /> Aenean commodo ligula eget dolor.</p>
-                    <div className="flex items-center justify-center gap-6 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <div className="flex items-center justify-center gap-6 mt-8">
                         <Button variant="outline">START QUIZ</Button>
                         <Button variant="outline">JOIN LIVE GAME</Button>
                     </div>

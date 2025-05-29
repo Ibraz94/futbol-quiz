@@ -90,7 +90,7 @@ const Leaderboards = () => {
                   <div className='flex items-center justify-center text-lg font-normal flex-1'>
                     {item.games}
                   </div>
-                  <div className='flex items-center justify-center flex-3'>
+                  <div className='flex items-center justify-center flex-1'>
                     <button className='text-lg font-normal bg-[#1C273D] rounded-xl px-4 py-2'>
                       {item.nowPlaying}
                     </button>
