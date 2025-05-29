@@ -54,7 +54,8 @@ export default function Games() {
   };
 
   return (
-    <div>
+    <div className='relative'>
+      
     <motion.div initial={{ opacity: 0 }}
       animate={{
         opacity: 1,

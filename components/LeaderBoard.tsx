@@ -60,7 +60,9 @@ const Leaderboards = () => {
     setIsLeaderboard(leaderboard[currentIndex])
   }
   return (
-    <section className=" flex flex-col items-center justify-center py-12 xl:py-2">
+    <section className=" flex flex-col items-center justify-center py-12 xl:py-2 relative">
+      <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute bottom-36 -left-16" />
+      <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute bottom-72 left-32" />
       <h2 className="text-center text-base font-normal text-accent uppercase">leaderboard</h2>
       <h1 className="text-center text-[50px] font-semibold">Quiz Games Leaderboard</h1>
       <p className="text-center font-light text-base">Check out our top players who have mastered the casino-style games and claimed their spot at the top!<br /> Compete with others to see if you can climb the ranks and become the ultimate champion.</p>

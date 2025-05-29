@@ -73,6 +73,11 @@ const Testimonials = () => {
     return (
         <section className="relative overflow-hidden py-44">
             {/* Background decorative elements */}
+            <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute top-36 -right-16" />
+            <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-36 right-32" />
+            <Image src="/box-1.png" alt="box-1" width={28} height={10} className="absolute top-64 left-8" />
+            <Image src="/circle-blue.png" alt="circle-blue" width={16} height={10} className="absolute top-52 left-0" />
+            <div className="w-[480px] h-[380px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[250px] absolute top-64 -left-64"></div>
             <div className="absolute inset-0  from-blue-900/20 via-transparent to-transparent"></div>
             <div className="container mx-auto px-6 relative z-10">
                 {/* Header */}
@@ -134,16 +139,16 @@ const Testimonials = () => {
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
-                                 
+
                                     </div>
                                     <div className="flex gap-10 items-center">
                                         <div>
                                             <h4 className="text-white font-medium text-[18px]">
                                                 {testimonial.name}
                                             </h4>
-                                        <p className="text-white/70 text-sm">
-                                            {testimonial.title}
-                                        </p>
+                                            <p className="text-white/70 text-sm">
+                                                {testimonial.title}
+                                            </p>
                                         </div>
                                         <Image src="/double-quotes.svg"
                                             alt="quote"
