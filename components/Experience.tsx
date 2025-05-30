@@ -11,7 +11,7 @@ export default function Experience() {
   const isInView = useInView(ref, { once: true, amount: 0.3 });
 
   return (
-    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black overflow-hidden' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
+    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black ' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
       
       {/* Left rectangle image - using relative positioning within a container */}
       <div className='absolute inset-0 pointer-events-none'>
@@ -32,9 +32,9 @@ export default function Experience() {
           opacity: 0,
           x: -200
         }}
-        className='relative z-10 container mx-auto flex flex-col justify-center items-start py-16 xl:px-0 min-h-[600px]'>
+        className='relative z-10 container mx-auto flex flex-col justify-center items-start py-16 xl:px-0 min-h-[600px] overflow-hidden'>
 
-        <div className='flex flex-col -space-y-12'>
+        <div className='flex flex-col -space-y-12 overflow-hidden'>
           <h1 className='text-start text-[50px] font-bold'>Experience the Quiz</h1>
           <h1 className='text-start text-[50px] font-bold'>Football Games</h1>
         </div>
@@ -45,7 +45,7 @@ export default function Experience() {
           our platform lets you dive into the action like never before.
         </p>
 
-        <div className='flex gap-6 mt-8 z-20 relative'>
+        <div className='flex gap-6 mt-8 z-20 relative overflow-hidden'>
           <Button variant="outline" >
             GET IN TOUCH
           </Button>
@@ -54,7 +54,7 @@ export default function Experience() {
           </Button>
         </div>
 
-        <div className='flex gap-6 mt-16 z-20 relative'>
+        <div className='flex gap-6 mt-16 z-20 relative overflow-hidden'>
           <Image src="/app-store.svg" alt="app store" width={211.5} height={100} className="cursor-pointer hover:opacity-80 transition-opacity" />
           <Image src="/play-store.svg" alt="play store" width={211.5} height={100} className="cursor-pointer hover:opacity-80 transition-opacity" />
         </div>
