@@ -115,7 +115,7 @@ const Testimonials = () => {
             {/* Static Background Elements */}
             <div className="absolute inset-0">
                 <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute top-36 -right-16" />
-                <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-36 right-32" />
+                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute top-36 right-32" />
                 <Image src="/box-1.png" alt="box-1" width={28} height={10} className="absolute top-64 left-8" />
                 <Image src="/circle-blue.png" alt="circle-blue" width={16} height={10} className="absolute top-52 left-0" />
                 <div className="w-[480px] h-[380px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[250px] absolute top-64 -left-64"></div>

@@ -103,7 +103,7 @@ const Leaderboards = () => {
       {/* Static Background Elements */}
       <div className="absolute inset-0">
         <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute bottom-36 -left-16" />
-        <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute bottom-72 left-32" />
+        <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute bottom-72 left-32" />
       </div>
 
       {/* Animated Content */}
