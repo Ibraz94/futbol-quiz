@@ -152,7 +152,7 @@ const Testimonials = () => {
                         animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
                         transition={{ delay: 1.2, duration: 0.5 }}
                         onClick={prevTestimonial}
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
+                        className="absolute left-0 top-[100px] -translate-y-1/2 -translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                     >
                         <ChevronLeft className="w-6 h-6" />
                     </motion.button>
@@ -162,7 +162,7 @@ const Testimonials = () => {
                         animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
                         transition={{ delay: 1.2, duration: 0.5 }}
                         onClick={nextTestimonial}
-                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
+                        className="absolute right-0 top-[100px] -translate-y-1/2 translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                     >
                         <ChevronRight className="w-6 h-6" />
                     </motion.button>
