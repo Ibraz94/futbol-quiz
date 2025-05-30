@@ -66,41 +66,46 @@ const Services = () => {
   };
 
   return (
-    <section ref={ref} className="relative min-h-[80vh] flex flex-col justify-center py-12 xl:py-0 overflow-hidden">
-      <div className="w-[184px] h-[184px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[150px] absolute top-36 right-96"></div>
-      <div className="w-[180px] h-[180px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[150px] absolute top-[450px] left-80"></div>
+    <section ref={ref} className="relative min-h-[80vh] flex flex-col justify-center py-8 sm:py-12 xl:py-0 overflow-hidden px-4 sm:px-6 lg:px-8">
+      <div className="w-[120px] h-[120px] sm:w-[150px] sm:h-[150px] lg:w-[184px] lg:h-[184px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[100px] sm:blur-[120px] lg:blur-[150px] absolute top-20 sm:top-36 right-10 sm:right-32 lg:right-96"></div>
+      <div className="w-[120px] h-[120px] sm:w-[150px] sm:h-[150px] lg:w-[180px] lg:h-[180px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[100px] sm:blur-[120px] lg:blur-[150px] absolute top-[300px] sm:top-[400px] lg:top-[450px] left-10 sm:left-32 lg:left-80"></div>
       
       <motion.div
         initial="hidden"
         animate={isInView ? "visible" : "hidden"}
         variants={headingVariants}
+        className="text-center mb-8 sm:mb-12"
       >
-        <h2 className="text-center text-base font-normal text-accent uppercase">Information</h2>
-        <h1 className="text-center text-[50px] font-semibold">Why Us Play Matchup</h1>
-        <p className="text-center font-light text-base">At Hazard, we provide thousands of players with the best gambling activities and discreet gaming<br /> experience of online casinos while creating a safe place to play.</p>
+        <h2 className="text-sm sm:text-base font-normal text-accent uppercase mb-2 sm:mb-4">Information</h2>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[50px] font-semibold mb-4 sm:mb-6 leading-tight">Why Us Play Matchup</h1>
+        <p className="font-light text-sm sm:text-base max-w-4xl mx-auto leading-relaxed px-4">
+          At Hazard, we provide thousands of players with the best gambling activities and discreet gaming<br className="hidden sm:block" /> experience of online casinos while creating a safe place to play.
+        </p>
       </motion.div>
 
       <motion.div 
-        className="container mx-auto mt-12"
+        className="container mx-auto"
         initial="hidden"
         animate={isInView ? "visible" : "hidden"}
         variants={containerVariants}
       >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 max-w-7xl mx-auto">
           {information.map((info, index) => (
             <motion.div
               key={index}
               variants={itemVariants}
-              className="flex flex-col items-center justify-center w-[410px] h-[350px] bg-[#2F265380] rounded-[20px] border-2 border-white/10"
+              className="flex flex-col items-center justify-center w-full max-w-[410px] mx-auto h-auto min-h-[280px] sm:min-h-[320px] lg:h-[350px] bg-[#2F265380] rounded-[15px] sm:rounded-[20px] border-2 border-white/10 p-6 sm:p-8"
             >
-              <div className="flex flex-col items-start justify-center text-center ml-8">
-                <div className="w-[80px] h-[80px] rounded-full flex items-center justify-center bg-accent mb-4">
-                  {info.icon}
+              <div className="flex flex-col items-center sm:items-start justify-center text-center sm:text-left w-full">
+                <div className="w-[60px] h-[60px] sm:w-[70px] sm:h-[70px] lg:w-[80px] lg:h-[80px] rounded-full flex items-center justify-center bg-accent mb-4 sm:mb-6">
+                  <div className="scale-75 sm:scale-90 lg:scale-100">
+                    {info.icon}
+                  </div>
                 </div>
-                <div className="text-[24px] font-medium mb-2">
+                <div className="text-lg sm:text-xl lg:text-[24px] font-medium mb-3 sm:mb-4">
                   {info.title}
                 </div>
-                <div className="text-lg font-light text-left w-[310px]">
+                <div className="text-sm sm:text-base lg:text-lg font-light leading-relaxed max-w-[310px]">
                   {info.description}
                 </div>
               </div>
