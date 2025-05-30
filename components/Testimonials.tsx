@@ -71,9 +71,9 @@ const Testimonials = () => {
 
     const getCardStyle = (index: number) => {
         if (index === currentIndex) {
-            return "bg-[#2F265380] hover:bg-accent border-2 border-white/20 scale-95 opacity-70";
+            return "md:bg-[#2F265380] md:hover:bg-accent bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
         } else {
-            return "bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
+            return "md:bg-[#2F265380] bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
         } 
     }
 
@@ -153,30 +153,9 @@ const Testimonials = () => {
                     {/* Testimonial Cards */}
                     {/* Mobile: Single card view */}
                     <div className="block md:hidden relative">
-                        {/* Navigation Buttons for Mobile */}
-                        <motion.button
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
-                            transition={{ delay: 1.2, duration: 0.5 }}
-                            onClick={prevTestimonial}
-                            className="absolute left-2 top-[80px] -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
-                        >
-                            <ChevronLeft className="w-4 h-4 sm:w-6 sm:h-6" />
-                        </motion.button>
-
-                        <motion.button
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
-                            transition={{ delay: 1.2, duration: 0.5 }}
-                            onClick={nextTestimonial}
-                            className="absolute right-2 top-[80px] -translate-y-1/2 z-20 w-10 h-10 sm:w-12 sm:h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
-                        >
-                            <ChevronRight className="w-4 h-4 sm:w-6 sm:h-6" />
-                        </motion.button>
-
                         <motion.div
                             variants={cardVariants}
-                            className="bg-accent border-2 border-white/20 text-white rounded-2xl p-4 sm:p-6 mx-8 sm:mx-12"
+                            className="bg-[#2F265380] border-2 border-white/20 text-white rounded-2xl p-4 sm:p-6 mx-8 sm:mx-12"
                         >
                             {/* Star Rating */}
                             <div className="flex gap-1 mb-4">
@@ -226,7 +205,7 @@ const Testimonials = () => {
                             initial={{ opacity: 0, x: -20 }}
                             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
                             transition={{ delay: 1.2, duration: 0.5 }}
-                            // onClick={prevTestimonial}
+                            onClick={prevTestimonial}
                             className="absolute left-0 lg:-left-4 top-[110px] -translate-y-1/2 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                         >
                             <ChevronLeft className="w-6 h-6" />
@@ -236,7 +215,7 @@ const Testimonials = () => {
                             initial={{ opacity: 0, x: 20 }}
                             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
                             transition={{ delay: 1.2, duration: 0.5 }}
-                            // onClick={nextTestimonial}
+                            onClick={nextTestimonial}
                             className="absolute right-0 lg:-right-4 top-[110px] -translate-y-1/2 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                         >
                             <ChevronRight className="w-6 h-6" />
@@ -304,7 +283,7 @@ const Testimonials = () => {
                                 key={index}
                                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
                                     index === currentIndex 
-                                        ? 'bg-accent scale-110' 
+                                        ? 'bg-white scale-110' 
                                         : 'bg-white/30'
                                 }`}
                             />
