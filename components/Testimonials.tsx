@@ -71,10 +71,11 @@ const Testimonials = () => {
 
     const getCardStyle = (index: number) => {
         if (index === currentIndex) {
-            return "hover:bg-accent border-2 border-white/20 text-white scale-105 z-10";
-        }
-        return "bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
-    };
+            return "bg-[#2F265380] hover:bg-accent border-2 border-white/20 scale-95 opacity-70";
+        } else {
+            return "bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
+        } 
+    }
 
     const headingVariants = {
         hidden: { y: -100, opacity: 0 },
