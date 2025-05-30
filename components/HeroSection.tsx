@@ -50,7 +50,7 @@ const HeroSection = () => {
                 transition={{ duration: 1, delay: 2, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
-                <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-32 left-44" />
+                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute top-32 left-44" />
             </motion.div>
 
             <motion.div
@@ -59,7 +59,7 @@ const HeroSection = () => {
                 transition={{ duration: 1, delay: 2, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2"
             >
-                <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute -bottom-14 left-1/2" />
+                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute -bottom-14 left-1/2" />
             </motion.div>
 
             <motion.div
