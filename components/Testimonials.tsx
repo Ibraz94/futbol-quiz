@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ChevronLeft, ChevronRight, Quote } from "lucide-react";
 import Image from "next/image";
+import { motion, useInView } from "framer-motion";
 
 interface Testimonial {
     id: number;
@@ -41,7 +42,9 @@ const testimonials: Testimonial[] = [
 ];
 
 const Testimonials = () => {
-    const [currentIndex, setCurrentIndex] = useState(1); // Start with middle card active
+    const ref = useRef(null);
+    const isInView = useInView(ref, { once: true, amount: 0.3 });
+    const [currentIndex, setCurrentIndex] = useState(1);
 
     const nextTestimonial = () => {
         setCurrentIndex((prev) => (prev + 1) % testimonials.length);
@@ -70,48 +73,106 @@ const Testimonials = () => {
         return "bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
     };
 
+    const headingVariants = {
+        hidden: { y: -100, opacity: 0 },
+        visible: {
+            y: 0,
+            opacity: 1,
+            transition: {
+                delay: 0.3,
+                duration: 0.8,
+                ease: [0.4, 0, 0.2, 1]
+            }
+        }
+    };
+
+    const cardsContainerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: {
+                delay: 0.5,
+                staggerChildren: 0.2,
+                delayChildren: 0.2
+            }
+        }
+    };
+
+    const cardVariants = {
+        hidden: { y: 100, opacity: 0 },
+        visible: {
+            y: 0,
+            opacity: 1,
+            transition: {
+                duration: 0.8,
+                ease: [0.4, 0, 0.2, 1]
+            }
+        }
+    };
+
     return (
         <section className="relative overflow-hidden py-44">
-            {/* Background decorative elements */}
-            <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute top-36 -right-16" />
-            <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-36 right-32" />
-            <Image src="/box-1.png" alt="box-1" width={28} height={10} className="absolute top-64 left-8" />
-            <Image src="/circle-blue.png" alt="circle-blue" width={16} height={10} className="absolute top-52 left-0" />
-            <div className="w-[480px] h-[380px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[250px] absolute top-64 -left-64"></div>
-            <div className="absolute inset-0  from-blue-900/20 via-transparent to-transparent"></div>
-            <div className="container mx-auto px-6 relative z-10">
+            {/* Static Background Elements */}
+            <div className="absolute inset-0">
+                <Image src="/circle-2.png" alt="circle-2" width={160} height={100} className="absolute top-36 -right-16" />
+                <Image src="/box-2.png" alt="box-2" width={22} height={10} className="absolute top-36 right-32" />
+                <Image src="/box-1.png" alt="box-1" width={28} height={10} className="absolute top-64 left-8" />
+                <Image src="/circle-blue.png" alt="circle-blue" width={16} height={10} className="absolute top-52 left-0" />
+                <div className="w-[480px] h-[380px] rounded-full bg-gradient-to-r from-[#3707FC] to-[#a442c5] blur-[250px] absolute top-64 -left-64"></div>
+                <div className="absolute inset-0 from-blue-900/20 via-transparent to-transparent"></div>
+            </div>
+
+            {/* Animated Content */}
+            <div ref={ref} className="container mx-auto px-6 relative z-10">
                 {/* Header */}
-                <div className="text-center mb-16">
+                <motion.div 
+                    className="text-center mb-16"
+                    initial="hidden"
+                    animate={isInView ? "visible" : "hidden"}
+                    variants={headingVariants}
+                >
                     <p className="text-accent text-sm font-semibold tracking-wide uppercase mb-3">
                         OUR TESTIMONIAL
                     </p>
                     <h2 className="text-4xl md:text-[50px] font-semibold text-white mb-4">
                         What Our Client Saying
                     </h2>
-                </div>
+                </motion.div>
 
                 {/* Testimonials Container */}
-                <div className="relative mx-auto">
+                <motion.div 
+                    className="relative mx-auto"
+                    initial="hidden"
+                    animate={isInView ? "visible" : "hidden"}
+                    variants={cardsContainerVariants}
+                >
                     {/* Navigation Buttons */}
-                    <button
+                    <motion.button
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
+                        transition={{ delay: 1.2, duration: 0.5 }}
                         onClick={prevTestimonial}
                         className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                     >
                         <ChevronLeft className="w-6 h-6" />
-                    </button>
+                    </motion.button>
 
-                    <button
+                    <motion.button
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
+                        transition={{ delay: 1.2, duration: 0.5 }}
                         onClick={nextTestimonial}
                         className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                     >
                         <ChevronRight className="w-6 h-6" />
-                    </button>
+                    </motion.button>
 
                     {/* Testimonial Cards */}
                     <div className="flex justify-center items-center gap-8 px-16">
                         {testimonials.map((testimonial, index) => (
-                            <div
+                            <motion.div
                                 key={testimonial.id}
+                                variants={cardVariants}
                                 className={`
                                 relative w-[370px] h-[270px] rounded-2xl p-4 transition-all duration-500 ease-in-out cursor-pointer
                                ${getCardStyle(index)}`}
@@ -139,7 +200,6 @@ const Testimonials = () => {
                                                 className="w-full h-full object-cover"
                                             />
                                         </div>
-
                                     </div>
                                     <div className="flex gap-10 items-center">
                                         <div>
@@ -157,10 +217,10 @@ const Testimonials = () => {
                                         />
                                     </div>
                                 </div>
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
-                </div>
+                </motion.div>
             </div>
         </section>
     );

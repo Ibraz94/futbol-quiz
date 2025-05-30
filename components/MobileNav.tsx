@@ -12,15 +12,15 @@ const links = [
   },
   {
     name: 'About',
-    path: "/about"
+    path: ""
   },
   {
     name: 'Games',
-    path: "/games"
+    path: ""
   },
   {
     name: 'Live',
-    path: "/live"
+    path: ""
   },
 ]
 

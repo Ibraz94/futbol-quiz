@@ -2,12 +2,16 @@
 
 import Photo from '@/components/Photo';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
+import { motion, useInView } from 'framer-motion';
 import Image from 'next/image';
+import { useRef } from 'react';
 
 export default function Experience() {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, amount: 0.3 });
+
   return (
-    <section className='relative bg-gradient-to-b from-gray-900 to-black' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
+    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
       
       {/* Left rectangle image - using relative positioning within a container */}
       <div className='absolute inset-0 pointer-events-none'>
@@ -20,10 +24,13 @@ export default function Experience() {
       {/* Main content container */}
       <motion.div 
         initial={{ opacity: 0, x: -200 }}
-        animate={{
+        animate={isInView ? {
           opacity: 1,
-          transition: { delay: 4, duration: 0.4, ease: "easeIn" },
-          x: 0
+          x: 0,
+          transition: { delay: 1, duration: 0.6, ease: "easeOut" }
+        } : {
+          opacity: 0,
+          x: -200
         }}
         className='relative z-10 container mx-auto flex flex-col justify-center items-start py-16 xl:px-0 min-h-[600px]'>
 
@@ -55,7 +62,19 @@ export default function Experience() {
 
       {/* Photo component positioned properly */}
       <div className='absolute inset-0 pointer-events-none'>
-        <Photo/>
+        <motion.div
+          initial={{ opacity: 0, x: 200 }}
+          animate={isInView ? {
+            opacity: 1,
+            x: 0,
+            transition: { delay: 1, duration: 0.6, ease: "easeOut" }
+          } : {
+            opacity: 0,
+            x: 200
+          }}
+        >
+          <Photo/>
+        </motion.div>
       </div>
     </section>
   )
