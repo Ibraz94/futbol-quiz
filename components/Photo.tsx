@@ -12,7 +12,7 @@ const Photo = () => {
         }}>
 
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={{ opacity: 0, x: 100 }}
           animate={{
             opacity: 1,
             transition: { delay: 2, duration: 0.4, ease: "easeIn" },
@@ -30,7 +30,7 @@ const Photo = () => {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, x: 50 }}
+          initial={{ opacity: 0, x: 100 }}
           animate={{
             opacity: 1,
             transition: { delay: 2, duration: 0.4, ease: "easeIn" },

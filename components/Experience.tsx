@@ -11,7 +11,7 @@ export default function Experience() {
   const isInView = useInView(ref, { once: true, amount: 0.3 });
 
   return (
-    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black ' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
+    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
       
       {/* Left rectangle image - using relative positioning within a container */}
       <div className='absolute inset-0 pointer-events-none'>
@@ -27,7 +27,7 @@ export default function Experience() {
         animate={isInView ? {
           opacity: 1,
           x: 0,
-          transition: { delay: 2, duration: 0.6, ease: "easeOut" }
+          transition: { delay: 2, duration: 0.4, ease: "easeOut" }
         } : {
           opacity: 0,
           x: -200
@@ -54,7 +54,7 @@ export default function Experience() {
           </Button>
         </div>
 
-        <div className='flex gap-6 mt-16 z-20 relative overflow-hidden'>
+        <div className='flex gap-6 mt-16 mb-4 z-20 relative overflow-hidden'>
           <Image src="/app-store.svg" alt="app store" width={211.5} height={100} className="cursor-pointer hover:opacity-80 transition-opacity" />
           <Image src="/play-store.svg" alt="play store" width={211.5} height={100} className="cursor-pointer hover:opacity-80 transition-opacity" />
         </div>
@@ -63,14 +63,13 @@ export default function Experience() {
       {/* Photo component positioned properly */}
       <div className='absolute inset-0 pointer-events-none'>
         <motion.div
-          initial={{ opacity: 0, x: 200 }}
+          initial={{ opacity: 0 }}
           animate={isInView ? {
             opacity: 1,
             x: 0,
-            transition: { delay: 2, duration: 0.6, ease: "easeOut" }
+            transition: { delay: 2, duration: 0.4, ease: "easeOut" }
           } : {
             opacity: 0,
-            x: 200
           }}
         >
           <Photo/>
