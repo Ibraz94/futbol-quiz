@@ -28,7 +28,7 @@ const MobileHeroSection = () => {
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 2 }}
+                transition={{ duration: 1, delay: 1.5 }}
                 className="relative flex flex-col items-center justify-start px-4 pt-16 z-[2]"
             >
                 {/* Headings and Buttons First */}
@@ -52,8 +52,8 @@ const MobileHeroSection = () => {
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 1, delay: 2.5 }}
-                        className="absolute -bottom-40 left-16 -translate-x-1/2"
+                        transition={{ duration: 1, delay: 2 }}
+                        className="absolute -bottom-32 left-16 -translate-x-1/2"
                     >
                         <Image 
                             src="/football.png" 
@@ -68,7 +68,7 @@ const MobileHeroSection = () => {
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 1, delay: 2.7 }}
+                        transition={{ duration: 1, delay: 2 }}
                         className="relative w-full h-[200px]"
                     >
                         <Image 
@@ -76,14 +76,14 @@ const MobileHeroSection = () => {
                             alt="player-left" 
                             width={340} 
                             height={80} 
-                            className="absolute -bottom-48 -left-24" 
+                            className="absolute -bottom-32 -left-24" 
                         />
                         <Image 
                             src="/player-right.png" 
                             alt="player-right" 
                             width={300} 
                             height={80} 
-                            className="absolute -bottom-48 -right-24 rotate-12" 
+                            className="absolute -bottom-32 -right-24 rotate-12" 
                         />
                     </motion.div>
                 </div>
@@ -93,7 +93,7 @@ const MobileHeroSection = () => {
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ duration: 1, delay: 2.5 }}
+                transition={{ duration: 1, delay: 2 }}
                 className="w-full h-full absolute top-0 left-0 z-[1] pointer-events-none"
             >
                 <Image 
