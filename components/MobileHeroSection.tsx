@@ -6,7 +6,7 @@ import Image from "next/image";
 
 const MobileHeroSection = () => {
     return (
-        <section className="relative h-dvh overflow-hidden bg-gradient-to-b from-[#111827] to-black md:hidden">
+        <section className="relative h-screen  bg-gradient-to-b from-[#111827] to-black md:hidden">
             {/* Hero Image - Full height from top */}
             <div className="absolute inset-0 w-full h-full z-0">
                 <Image 
@@ -53,7 +53,7 @@ const MobileHeroSection = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1, delay: 2 }}
-                        className="absolute -bottom-32 left-16 -translate-x-1/2"
+                        className="absolute -bottom-20 left-20 -translate-x-1/2"
                     >
                         <Image 
                             src="/football.png" 
@@ -76,14 +76,14 @@ const MobileHeroSection = () => {
                             alt="player-left" 
                             width={340} 
                             height={80} 
-                            className="absolute -bottom-32 -left-24" 
+                            className="absolute -bottom-24 -left-20" 
                         />
                         <Image 
                             src="/player-right.png" 
                             alt="player-right" 
                             width={300} 
                             height={80} 
-                            className="absolute -bottom-32 -right-24 rotate-12" 
+                            className="absolute -bottom-24 -right-24 rotate-12" 
                         />
                     </motion.div>
                 </div>
