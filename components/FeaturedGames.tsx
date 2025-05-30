@@ -3,7 +3,9 @@
 import { motion, useInView } from 'framer-motion';
 import { useState, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
+import { Autoplay } from 'swiper/modules';
 import "swiper/css";
+import "swiper/css/autoplay";
 import Image from 'next/image';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
@@ -79,7 +81,7 @@ export default function Games() {
           initial={{ opacity: 0, y: -100 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -100 }}
           transition={{ duration: 0.8, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-row gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8 md:mb-10 lg:mb-10 justify-center lg:justify-end"
+          className="hidden lg:flex flex-row gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8 md:mb-10 lg:mb-10 justify-center lg:justify-end"
         >
           <motion.button
             initial={{ opacity: 0, y: -20 }}
@@ -104,10 +106,15 @@ export default function Games() {
       </div>
       
         <Swiper
+          modules={[Autoplay]}
           slidesPerView={1}
           spaceBetween={15}
           centeredSlides={false}
           loop={false}
+          autoplay={{
+            delay: 3000,
+            disableOnInteraction: false,
+          }}
           className="w-full"
           onSlideChange={handleSlideChange}
           ref={swiperRef}

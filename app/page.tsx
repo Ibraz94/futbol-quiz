@@ -2,6 +2,7 @@
 
 import FeaturedGames from "@/components/FeaturedGames";
 import HeroSection from "@/components/HeroSection";
+import MobileHeroSection from "@/components/MobileHeroSection";
 import Information from "@/components/Information";
 import Leaderboard from "@/components/LeaderBoard";
 import Experience from "@/components/Experience";
@@ -12,7 +13,8 @@ const Home = () => {
   return (
     <div className="relative bg-gradient-to-b from-[#111827] to-black" >
         <div className="">
-          <HeroSection/>
+          <MobileHeroSection />
+          <HeroSection />
         </div>
         <ScrollAnimation delay={0.5}>
         <div className="">

@@ -7,7 +7,7 @@ import Image from "next/image";
 
 const HeroSection = () => {
     return (
-        <section className="relative h-dvh overflow-hidden bg-gradient-to-b from-[#111827] to-black">
+        <section className="relative h-dvh overflow-hidden bg-gradient-to-b from-[#111827] to-black hidden md:block">
             <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -48,9 +48,9 @@ const HeroSection = () => {
                 initial={{ opacity: 0, x: "-450px", y: "500px" }}
                 animate={{ opacity: 1, x: "-700px", y: "00px" }}
                 transition={{ duration: 1, delay: 2, ease: "easeIn" }}
-                className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2 md:block"
+                className="w-[1400px] h-[700px] absolute top-0 left-1/2 -translate-x-1/2 md:block"
             >
-                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute top-32 left-44 md:top-32 md:left-44" />
+                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute top-0 left-52 md:top-32 md:left-44" />
             </motion.div>
 
             <motion.div
@@ -59,7 +59,7 @@ const HeroSection = () => {
                 transition={{ duration: 1, delay: 2, ease: "easeIn" }}
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2 md:block"
             >
-                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute -bottom-14 left-1/2 md:-bottom-14 md:left-1/2" />
+                <Image src="/Box-2.png" alt="box-2" width={22} height={10} className="absolute bottom-14 left-1/2 md:-bottom-14 md:left-1/2" />
             </motion.div>
 
             <motion.div
@@ -87,19 +87,6 @@ const HeroSection = () => {
                 className="w-[1400px] h-[700px] absolute top-18 left-1/2 -translate-x-1/2 md:block"
             >
                 <Image src="/circle-2.png" alt="circle-2" width={180} height={100} className="absolute top-32 -left-36 md:top-32 md:-left-36" />
-            </motion.div>
-
-            {/* Mobile-specific animated elements */}
-            <motion.div
-                initial={{ opacity: 0, x: "-100px", y: "0px" }}
-                animate={{ opacity: 1, x: "0px", y: "0px" }}
-                transition={{ duration: 1, delay: 2, ease: "easeIn" }}
-                className="block md:hidden w-full h-full absolute top-0 left-0"
-            >
-                <Image src="/box-1.png" alt="box-1" width={15} height={6} className="absolute top-20 right-4" />
-                <Image src="/Box-2.png" alt="box-2" width={12} height={6} className="absolute top-40 left-8" />
-                <Image src="/circle.png" alt="circle" width={30} height={30} className="absolute bottom-32 right-6 opacity-30" />
-                <Image src="/circle-2.png" alt="circle-2" width={100} height={60} className="absolute top-40 -left-12" />
             </motion.div>
 
             {/* Keep the large images hidden on mobile */}
