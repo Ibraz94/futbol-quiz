@@ -1,12 +1,11 @@
 'use client'
 
 import Link from "next/link";
-import { Button } from "./ui/button";
 import { ArrowRightToLine, MessageSquarePlus, Trophy } from "lucide-react";
 import Nav from "./Nav";
 import MobileNav from "./MobileNav";
-import { motion } from "framer-motion";
 import Image from "next/image";
+
 
 const Header = () => {
   return (
@@ -15,7 +14,7 @@ const Header = () => {
       <div className="container mx-auto flex justify-between items-center">
         <Link href="/">
           <h1 className="text-4xl font-semibold flex items-center gap-2">
-            <span><img src="/logo.svg" alt="logo" /></span>
+            <span><Image src="/logo.svg" alt="logo" width={32} height={32} /></span>
             Futbol Quiz
           </h1>
         </Link>

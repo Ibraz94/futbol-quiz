@@ -8,14 +8,14 @@ const Photo = () => {
       <motion.div initial={{ opacity: 0 }}
         animate={{
           opacity: 1,
-          transition: { delay: 4, duration: 0.4, ease: "easeIn" }
+          transition: { delay: 2, duration: 0.4, ease: "easeIn" }
         }}>
 
         <motion.div
           initial={{ opacity: 0, x: 50 }}
           animate={{
             opacity: 1,
-            transition: { delay: 4, duration: 0.4, ease: "easeIn" },
+            transition: { delay: 3, duration: 0.4, ease: "easeIn" },
             x: 0
           }}
           className="absolute top-0 right-28 z-5">
@@ -33,7 +33,7 @@ const Photo = () => {
           initial={{ opacity: 0, x: 50 }}
           animate={{
             opacity: 1,
-            transition: { delay: 4, duration: 0.4, ease: "easeIn" },
+            transition: { delay: 2, duration: 0.4, ease: "easeIn" },
             x: 0
           }}
           className="absolute -top-12 right-40 z-6">

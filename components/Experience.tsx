@@ -11,7 +11,7 @@ export default function Experience() {
   const isInView = useInView(ref, { once: true, amount: 0.3 });
 
   return (
-    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
+    <section ref={ref} className='relative bg-gradient-to-b from-gray-900 to-black overflow-hidden' style={{ backgroundImage: `url(/Rectangle.png)`, minHeight: '600px' }}>
       
       {/* Left rectangle image - using relative positioning within a container */}
       <div className='absolute inset-0 pointer-events-none'>
@@ -27,7 +27,7 @@ export default function Experience() {
         animate={isInView ? {
           opacity: 1,
           x: 0,
-          transition: { delay: 1, duration: 0.6, ease: "easeOut" }
+          transition: { delay: 2, duration: 0.6, ease: "easeOut" }
         } : {
           opacity: 0,
           x: -200
@@ -67,7 +67,7 @@ export default function Experience() {
           animate={isInView ? {
             opacity: 1,
             x: 0,
-            transition: { delay: 1, duration: 0.6, ease: "easeOut" }
+            transition: { delay: 2, duration: 0.6, ease: "easeOut" }
           } : {
             opacity: 0,
             x: 200

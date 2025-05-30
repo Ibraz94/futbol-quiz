@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import Image from 'next/image';
 import { motion, useInView } from 'framer-motion';
 
@@ -52,12 +52,12 @@ const leaderboard = [
 const Leaderboards = () => {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, amount: 0.3 });
-  const [isLeaderboard, setIsLeaderboard] = useState(leaderboard[0]);
+  // const [_isLeaderboard, _setIsLeaderboard] = useState(leaderboard[0]);
 
-  const handleSlideChange = (swiper: any) => {
-    const currentIndex = swiper.activeIndex;
-    setIsLeaderboard(leaderboard[currentIndex])
-  }
+  // const handleSlideChange = (swiper: any) => {
+  //   const currentIndex = swiper.activeIndex;
+  //   setIsLeaderboard(leaderboard[currentIndex])
+  // }
 
   const headingVariants = {
     hidden: { y: -100, opacity: 0 },

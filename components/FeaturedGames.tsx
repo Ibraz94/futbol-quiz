@@ -4,8 +4,6 @@ import { motion, useInView } from 'framer-motion';
 import { useState, useRef } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import "swiper/css";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
@@ -13,9 +11,6 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 const featuredGames = [
   {
-
-
-
     image: "/bingo.png",
 
   },
@@ -37,6 +32,8 @@ export default function Games() {
   const swiperRef = useRef<any>(null);
   const containerRef = useRef(null);
   const isInView = useInView(containerRef, { once: true, amount: 0.3 });
+
+  console.log(project)
 
   const handleSlideChange = (swiper: any) => {
     const currentIndex = swiper.activeIndex;
