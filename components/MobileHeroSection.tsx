@@ -6,7 +6,7 @@ import Image from "next/image";
 
 const MobileHeroSection = () => {
     return (
-        <section className="relative h-screen  bg-gradient-to-b from-[#111827] to-black md:hidden">
+        <section className="relative h-screen bg-gradient-to-b from-[#111827] to-black md:hidden">
             {/* Hero Image - Full height from top */}
             <div className="absolute inset-0 w-full h-full z-0">
                 <Image 
@@ -74,16 +74,16 @@ const MobileHeroSection = () => {
                         <Image 
                             src="/player-left.png" 
                             alt="player-left" 
-                            width={280} 
+                            width={250} 
                             height={80} 
-                            className="absolute -bottom-12 -left-16" 
+                            className="absolute -bottom-12 -left-16 " 
                         />
                         <Image 
                             src="/player-right.png" 
                             alt="player-right" 
-                            width={260} 
+                            width={230} 
                             height={80} 
-                            className="absolute -bottom-12 -right-16 rotate-12" 
+                            className="absolute -bottom-12 -right-0 rotate-12" 
                         />
                     </motion.div>
                 </div>
