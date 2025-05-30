@@ -4,6 +4,11 @@ import { useState, useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { motion, useInView } from "framer-motion";
+import { Swiper, SwiperSlide } from 'swiper/react';
+import { Navigation, Pagination, Autoplay } from 'swiper/modules';
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
 
 interface Testimonial {
     id: number;
@@ -43,6 +48,8 @@ const testimonials: Testimonial[] = [
 
 const Testimonials = () => {
     const ref = useRef(null);
+    const swiperRef = useRef<any>(null);
+    const [testimonial, setTestimonial] = useState(testimonials[0]);
     const isInView = useInView(ref, { once: true, amount: 0.3 });
     const [currentIndex, setCurrentIndex] = useState(1);
 
@@ -67,6 +74,12 @@ const Testimonials = () => {
                 ★
             </span>
         ));
+    };
+
+    const handleSlideChange = (swiper: any) => {
+        const currentIndex = swiper.activeIndex;
+        setTestimonial(testimonials[currentIndex]);
+        setCurrentIndex(currentIndex);
     };
 
     const getCardStyle = (index: number) => {
@@ -150,52 +163,77 @@ const Testimonials = () => {
                     animate={isInView ? "visible" : "hidden"}
                     variants={cardsContainerVariants}
                 >
-                    {/* Testimonial Cards */}
-                    {/* Mobile: Single card view */}
+                    {/* Mobile: Swiper view */}
                     <div className="block md:hidden relative">
-                        <motion.div
-                            variants={cardVariants}
-                            className="bg-[#2F265380] border-2 border-white/20 text-white rounded-2xl p-4 sm:p-6 mx-8 sm:mx-12"
+                        <Swiper
+                            ref={swiperRef}
+                            modules={[Pagination, Autoplay]}
+                            spaceBetween={20}
+                            slidesPerView={1}
+                            pagination={{
+                                clickable: true,
+                                el: '.swiper-pagination',
+                            }}
+                            autoplay={{
+                                delay: 3000,
+                                disableOnInteraction: false,
+                                pauseOnMouseEnter: true
+                            }}
+                            onSlideChange={handleSlideChange}
+                            className="mx-4"
                         >
-                            {/* Star Rating */}
-                            <div className="flex gap-1 mb-4">
-                                {renderStars(displayedTestimonials[currentIndex].rating)}
-                            </div>
+                            {displayedTestimonials.map((testimonial) => (
+                                <SwiperSlide key={testimonial.id}>
+                                    <motion.div
+                                        variants={cardVariants}
+                                        className="bg-[#2F265380] border-2 border-white/20 text-white rounded-2xl p-4 sm:p-6"
+                                    >
+                                        {/* Star Rating */}
+                                        <div className="flex gap-1 mb-4">
+                                            {renderStars(testimonial.rating)}
+                                        </div>
 
-                            {/* Content */}
-                            <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-6">
-                                {displayedTestimonials[currentIndex].content}
-                            </p>
+                                        {/* Content */}
+                                        <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-6">
+                                            {testimonial.content}
+                                        </p>
 
-                            {/* Profile */}
-                            <div className="flex items-center gap-3 sm:gap-4">
-                                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
-                                    <Image
-                                        src={displayedTestimonials[currentIndex].image}
-                                        alt={displayedTestimonials[currentIndex].name}
-                                        width={56}
-                                        height={56}
-                                        className="w-full h-full object-cover"
-                                    />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="text-white font-medium text-base sm:text-lg truncate">
-                                        {displayedTestimonials[currentIndex].name}
-                                    </h4>
-                                    <p className="text-white/70 text-sm truncate">
-                                        {displayedTestimonials[currentIndex].title}
-                                    </p>
-                                </div>
-                                <div className="flex-shrink-0">
-                                    <Image src="/double-quotes.svg"
-                                        alt="quote"
-                                        width={40}
-                                        height={40}
-                                        className="sm:w-16 sm:h-16"
-                                    />
-                                </div>
-                            </div>
-                        </motion.div>
+                                        {/* Profile */}
+                                        <div className="flex items-center gap-3 sm:gap-4">
+                                            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
+                                                <Image
+                                                    src={testimonial.image}
+                                                    alt={testimonial.name}
+                                                    width={56}
+                                                    height={56}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-white font-medium text-base sm:text-lg truncate">
+                                                    {testimonial.name}
+                                                </h4>
+                                                <p className="text-white/70 text-sm truncate">
+                                                    {testimonial.title}
+                                                </p>
+                                            </div>
+                                            <div className="flex-shrink-0">
+                                                <Image 
+                                                    src="/double-quotes.svg"
+                                                    alt="quote"
+                                                    width={40}
+                                                    height={40}
+                                                    className="sm:w-16 sm:h-16"
+                                                />
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                </SwiperSlide>
+                            ))}
+                            
+                            {/* Pagination for Mobile */}
+                            <div className="swiper-pagination !bottom-0"></div>
+                        </Swiper>
                     </div>
 
                     {/* Desktop: Multi-card view */}
@@ -274,20 +312,6 @@ const Testimonials = () => {
                                 </motion.div>
                             ))}
                         </div>
-                    </div>
-
-                    {/* Dots Indicator for Mobile */}
-                    <div className="flex justify-center gap-2 mt-6 md:hidden">
-                        {displayedTestimonials.map((_, index) => (
-                            <div
-                                key={index}
-                                className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                                    index === currentIndex 
-                                        ? 'bg-white scale-110' 
-                                        : 'bg-white/30'
-                                }`}
-                            />
-                        ))}
                     </div>
                 </motion.div>
             </div>
