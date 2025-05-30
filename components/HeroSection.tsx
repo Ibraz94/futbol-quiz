@@ -128,8 +128,8 @@ const HeroSection = () => {
                 <div className="flex flex-col items-center justify-center pt-2">
                     <p className="text-lg md:text-xl font-light text-center max-w-[600px]">Lorem ipsum dolor sit amet, consectetuer adipiscing elit.<br className="hidden md:block" /> Aenean commodo ligula eget dolor.</p>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 mt-6 md:mt-8">
-                        <Button variant="outline" className="w-full md:w-auto">START QUIZ</Button>
-                        <Button variant="outline" className="w-full md:w-auto">JOIN LIVE GAME</Button>
+                        <Button variant="outline" className="w-[160px] ">START QUIZ</Button>
+                        <Button variant="outline" className="w-[160px] ">JOIN LIVE GAME</Button>
                     </div>
                 </div>
             </motion.div>

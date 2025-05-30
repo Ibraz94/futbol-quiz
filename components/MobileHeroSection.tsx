@@ -40,7 +40,7 @@ const MobileHeroSection = () => {
                             Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor.
                         </p>
                         <div className="flex flex-col items-center justify-center gap-4 mt-6">
-                            <Button variant="outline" className="w-24 hover:bg-accent text-xs">START QUIZ</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs">START QUIZ</Button>
                             <Button variant="outline" className="w-28 hover:bg-accent text-xs">JOIN LIVE GAME</Button>
                         </div>
                     </div>
@@ -53,7 +53,7 @@ const MobileHeroSection = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 1, delay: 2 }}
-                        className="absolute -bottom-20 left-20 -translate-x-1/2"
+                        className="absolute -bottom-12 left-12 -translate-x-1/2"
                     >
                         <Image 
                             src="/football.png" 
@@ -74,16 +74,16 @@ const MobileHeroSection = () => {
                         <Image 
                             src="/player-left.png" 
                             alt="player-left" 
-                            width={340} 
+                            width={280} 
                             height={80} 
-                            className="absolute -bottom-24 -left-20" 
+                            className="absolute -bottom-12 -left-16" 
                         />
                         <Image 
                             src="/player-right.png" 
                             alt="player-right" 
-                            width={300} 
+                            width={260} 
                             height={80} 
-                            className="absolute -bottom-24 -right-24 rotate-12" 
+                            className="absolute -bottom-12 -right-16 rotate-12" 
                         />
                     </motion.div>
                 </div>
@@ -115,7 +115,7 @@ const MobileHeroSection = () => {
                     alt="circle" 
                     width={30} 
                     height={30} 
-                    className="absolute bottom-[360px] right-32 opacity-40" 
+                    className="absolute bottom-[360px] right-16 opacity-40" 
                 />
                 <Image 
                     src="/circle-2.png" 
