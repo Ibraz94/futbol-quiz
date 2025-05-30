@@ -7,27 +7,19 @@ import "swiper/css";
 import Image from 'next/image';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
-
-
 const featuredGames = [
   {
     image: "/bingo.png",
-
   },
   {
     image: "/guess-player.png",
   },
   {
-
     image: "/tiktak.png",
-
   },
 ];
 
-
-
 export default function Games() {
-
   const [project, setProject] = useState(featuredGames[0]);
   const swiperRef = useRef<any>(null);
   const containerRef = useRef(null);
@@ -59,26 +51,26 @@ export default function Games() {
       initial={{ opacity: 0, y: -100 }}
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -100 }}
       transition={{ duration: 0.8, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className='py-12'>
-        <div className='container mx-auto flex flex-col justify-center items-center xl:px-0'>
-      <div className='flex items-center justify-between w-full'>
+      className='py-6 sm:py-8 md:py-10 lg:py-12'>
+        <div className='container mx-auto flex flex-col justify-center items-center px-4 sm:px-6 md:px-8 xl:px-0'>
+      <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between w-full'>
         <motion.div 
           initial={{ opacity: 0, y: -100 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -100 }}
           transition={{ duration: 0.8, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className='flex flex-col mb-12 xl:w-max xl:justify-none space-y-[-12px]'>
+          className='flex flex-col mb-6 sm:mb-8 md:mb-10 lg:mb-12 xl:w-max xl:justify-none space-y-[8px] sm:space-y-[-10px] md:space-y-[12px]'>
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
             transition={{ duration: 0.6, delay: 0.9, ease: [0.22, 1, 0.36, 1] }}
-            className='text-base uppercase text-accent'>
+            className='text-xs sm:text-sm md:text-base uppercase text-accent'>
             Latest Games
           </motion.h1>
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
             animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
             transition={{ duration: 0.6, delay: 1.0, ease: [0.22, 1, 0.36, 1] }}
-            className='text-[50px] font-semibold'>
+            className='text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-[50px] font-semibold'>
             Featured Games
           </motion.h1>
         </motion.div>
@@ -87,38 +79,56 @@ export default function Games() {
           initial={{ opacity: 0, y: -100 }}
           animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -100 }}
           transition={{ duration: 0.8, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-row gap-6 mb-12"
+          className="flex flex-row gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8 md:mb-10 lg:mb-10 justify-center lg:justify-end"
         >
           <motion.button
             initial={{ opacity: 0, y: -20 }}
             animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
             transition={{ duration: 0.6, delay: 1.1, ease: [0.22, 1, 0.36, 1] }}
-            className="border hover:bg-accent-hover hover:border-none text-white w-[37px] h-[37px] flex justify-center items-center rounded-full transition-all"
+            className="border hover:bg-accent-hover hover:border-none text-white w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:w-[37px] md:h-[37px] flex justify-center items-center rounded-full transition-all"
             onClick={handlePrevSlide}
           >
-            <ArrowLeft className="w-4" strokeWidth={1.5} />
+            <ArrowLeft className="w-3 sm:w-3.5 md:w-4" strokeWidth={1.5} />
           </motion.button>
           <motion.button
             initial={{ opacity: 0, y: -20 }}
             animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
             transition={{ duration: 0.6, delay: 1.2, ease: [0.22, 1, 0.36, 1] }}
-            className="border hover:bg-accent-hover hover:border-none text-white w-[37px] h-[37px] flex justify-center items-center rounded-full transition-all"
+            className="border hover:bg-accent-hover hover:border-none text-white w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:w-[37px] md:h-[37px] flex justify-center items-center rounded-full transition-all"
             onClick={handleNextSlide}
           >
-            <ArrowRight className="w-4" strokeWidth={1.5} />
+            <ArrowRight className="w-3 sm:w-3.5 md:w-4" strokeWidth={1.5} />
           </motion.button>
         </motion.div>
 
       </div>
       
         <Swiper
-          slidesPerView={3}
-          spaceBetween={30}
+          slidesPerView={1}
+          spaceBetween={15}
           centeredSlides={false}
           loop={false}
           className="w-full"
           onSlideChange={handleSlideChange}
-          ref={swiperRef}>
+          ref={swiperRef}
+          breakpoints={{
+            640: {
+              slidesPerView: 1,
+              spaceBetween: 20,
+            },
+            768: {
+              slidesPerView: 2,
+              spaceBetween: 25,
+            },
+            1024: {
+              slidesPerView: 2,
+              spaceBetween: 30,
+            },
+            1280: {
+              slidesPerView: 3,
+              spaceBetween: 30,
+            },
+          }}>
           {featuredGames.map((game, index) => (
             <SwiperSlide key={index} className="!flex !justify-center">
               <motion.div
@@ -141,14 +151,14 @@ export default function Games() {
                   delay: index * 0.2,
                   ease: "easeOut" 
                 }}
-                className='w-[380px] h-[410px] rounded-[20px] flex justify-center items-center bg-pink-50/20 overflow-hidden'
+                className='w-full max-w-[280px] h-[300px] sm:max-w-[320px] sm:h-[340px] md:max-w-[350px] md:h-[370px] lg:max-w-[380px] lg:h-[400px] xl:h-[410px] rounded-[15px] sm:rounded-[18px] md:rounded-[20px] flex justify-center items-center bg-pink-50/20 overflow-hidden mx-auto'
               >
                 <Image 
                   src={game.image} 
                   alt="game" 
                   width={400} 
                   height={400} 
-                  className="w-full h-full object-cover rounded-[20px]"
+                  className="w-full h-full object-cover rounded-[15px] sm:rounded-[18px] md:rounded-[20px]"
                 />
               </motion.div>
             </SwiperSlide>

@@ -94,10 +94,10 @@ const Services = () => {
             <motion.div
               key={index}
               variants={itemVariants}
-              className="flex flex-col items-center justify-center w-full max-w-[410px] mx-auto h-auto min-h-[280px] sm:min-h-[320px] lg:h-[350px] bg-[#2F265380] rounded-[15px] sm:rounded-[20px] border-2 border-white/10 p-6 sm:p-8"
+              className="flex flex-col items-center justify-center w-full max-w-[410px] mx-auto h-auto min-h-[280px] sm:min-h-[320px] lg:h-[350px] bg-[#2F265380] rounded-[15px] sm:rounded-[20px] border-2 border-white/10 hover:border-accent transition-all duration-300 ease-in-out p-6 sm:p-8 group"
             >
               <div className="flex flex-col items-center sm:items-start justify-center text-center sm:text-left w-full">
-                <div className="w-[60px] h-[60px] sm:w-[70px] sm:h-[70px] lg:w-[80px] lg:h-[80px] rounded-full flex items-center justify-center bg-accent mb-4 sm:mb-6">
+                <div className="w-[60px] h-[60px] sm:w-[70px] sm:h-[70px] lg:w-[80px] lg:h-[80px] rounded-full flex items-center justify-center bg-accent group-hover:bg-transparent border-2 border-transparent group-hover:border-accent transition-all duration-300 ease-in-out mb-4 sm:mb-6">
                   <div className="scale-75 sm:scale-90 lg:scale-100">
                     {info.icon}
                   </div>

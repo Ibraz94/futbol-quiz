@@ -46,12 +46,15 @@ const Testimonials = () => {
     const isInView = useInView(ref, { once: true, amount: 0.3 });
     const [currentIndex, setCurrentIndex] = useState(1);
 
+    // Show only first 3 testimonials
+    const displayedTestimonials = testimonials.slice(0, 3);
+
     const nextTestimonial = () => {
-        setCurrentIndex((prev) => (prev + 1) % testimonials.length);
+        setCurrentIndex((prev) => (prev + 1) % displayedTestimonials.length);
     };
 
     const prevTestimonial = () => {
-        setCurrentIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length);
+        setCurrentIndex((prev) => (prev - 1 + displayedTestimonials.length) % displayedTestimonials.length);
     };
 
     const renderStars = (rating: number) => {
@@ -68,7 +71,7 @@ const Testimonials = () => {
 
     const getCardStyle = (index: number) => {
         if (index === currentIndex) {
-            return "bg-accent border-2 border-white/20 text-white scale-105 z-10";
+            return "hover:bg-accent border-2 border-white/20 text-white scale-105 z-10";
         }
         return "bg-[#2F265380] border-2 border-white/20 scale-95 opacity-70";
     };
@@ -176,20 +179,20 @@ const Testimonials = () => {
                         >
                             {/* Star Rating */}
                             <div className="flex gap-1 mb-4">
-                                {renderStars(testimonials[currentIndex].rating)}
+                                {renderStars(displayedTestimonials[currentIndex].rating)}
                             </div>
 
                             {/* Content */}
                             <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-6">
-                                {testimonials[currentIndex].content}
+                                {displayedTestimonials[currentIndex].content}
                             </p>
 
                             {/* Profile */}
                             <div className="flex items-center gap-3 sm:gap-4">
                                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden border-2 border-white flex-shrink-0">
                                     <Image
-                                        src={testimonials[currentIndex].image}
-                                        alt={testimonials[currentIndex].name}
+                                        src={displayedTestimonials[currentIndex].image}
+                                        alt={displayedTestimonials[currentIndex].name}
                                         width={56}
                                         height={56}
                                         className="w-full h-full object-cover"
@@ -197,10 +200,10 @@ const Testimonials = () => {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h4 className="text-white font-medium text-base sm:text-lg truncate">
-                                        {testimonials[currentIndex].name}
+                                        {displayedTestimonials[currentIndex].name}
                                     </h4>
                                     <p className="text-white/70 text-sm truncate">
-                                        {testimonials[currentIndex].title}
+                                        {displayedTestimonials[currentIndex].title}
                                     </p>
                                 </div>
                                 <div className="flex-shrink-0">
@@ -222,7 +225,7 @@ const Testimonials = () => {
                             initial={{ opacity: 0, x: -20 }}
                             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -20 }}
                             transition={{ delay: 1.2, duration: 0.5 }}
-                            onClick={prevTestimonial}
+                            // onClick={prevTestimonial}
                             className="absolute left-0 lg:-left-4 top-[110px] -translate-y-1/2 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                         >
                             <ChevronLeft className="w-6 h-6" />
@@ -232,21 +235,21 @@ const Testimonials = () => {
                             initial={{ opacity: 0, x: 20 }}
                             animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
                             transition={{ delay: 1.2, duration: 0.5 }}
-                            onClick={nextTestimonial}
+                            // onClick={nextTestimonial}
                             className="absolute right-0 lg:-right-4 top-[110px] -translate-y-1/2 z-20 w-12 h-12 border hover:bg-accent hover:border-none rounded-full flex items-center justify-center text-white transition-all duration-300 hover:scale-110"
                         >
                             <ChevronRight className="w-6 h-6" />
                         </motion.button>
 
                         <div className="flex justify-center items-center gap-4 lg:gap-8 px-4 lg:px-16">
-                            {testimonials.map((testimonial, index) => (
+                            {displayedTestimonials.map((testimonial, index) => (
                                 <motion.div
                                     key={testimonial.id}
                                     variants={cardVariants}
                                     className={`
                                     relative w-full max-w-[280px] lg:max-w-[370px] h-[240px] lg:h-[270px] rounded-2xl p-3 lg:p-4 transition-all duration-500 ease-in-out cursor-pointer
                                    ${getCardStyle(index)}`}
-                                    onClick={() => setCurrentIndex(index)}
+                                    onMouseEnter={() => setCurrentIndex(index)}
                                 >
                                     {/* Star Rating */}
                                     <div className="flex gap-1 mb-3">
@@ -295,14 +298,13 @@ const Testimonials = () => {
 
                     {/* Dots Indicator for Mobile */}
                     <div className="flex justify-center gap-2 mt-6 md:hidden">
-                        {testimonials.map((_, index) => (
-                            <button
+                        {displayedTestimonials.map((_, index) => (
+                            <div
                                 key={index}
-                                onClick={() => setCurrentIndex(index)}
                                 className={`w-3 h-3 rounded-full transition-all duration-300 ${
                                     index === currentIndex 
                                         ? 'bg-accent scale-110' 
-                                        : 'bg-white/30 hover:bg-white/50'
+                                        : 'bg-white/30'
                                 }`}
                             />
                         ))}
