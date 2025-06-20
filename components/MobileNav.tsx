@@ -11,18 +11,18 @@ const links = [
     name: 'Home',
     path: "/"
   },
-  {
-    name: 'About',
-    path: ""
-  },
+  // {
+  //   name: 'About',
+  //   path: ""
+  // },
   {
     name: 'Games',
     path: ""
   },
-  {
-    name: 'Live',
-    path: ""
-  },
+  // {
+  //   name: 'Live',
+  //   path: ""
+  // },
 ]
 
 const MobileNav = () => {

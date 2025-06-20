@@ -1,17 +1,19 @@
 'use client'
 
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Image from "next/image";
 
 const MobileHeroSection = () => {
+    const router = useRouter();
     return (
         <section className="relative h-screen bg-gradient-to-b from-[#111827] to-black md:hidden">
             {/* Hero Image - Full height from top */}
             <div className="absolute inset-0 w-full h-full z-0">
-                <Image 
-                    src="/Hero.png" 
-                    alt="hero-image" 
+                <Image
+                    src="/Hero.png"
+                    alt="hero-image"
                     width={780}
                     height={780}
                     priority
@@ -41,7 +43,7 @@ const MobileHeroSection = () => {
                         </p>
                         <div className="flex flex-col items-center justify-center gap-4 mt-6">
                             <Button variant="outline" className="w-28 hover:bg-accent text-xs">START QUIZ</Button>
-                            <Button variant="outline" className="w-28 hover:bg-accent text-xs">JOIN LIVE GAME</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/bingogame")}>JOIN LIVE GAME</Button>
                         </div>
                     </div>
                 </div>
@@ -55,11 +57,11 @@ const MobileHeroSection = () => {
                         transition={{ duration: 1, delay: 2 }}
                         className="absolute -bottom-12 left-12 -translate-x-1/2"
                     >
-                        <Image 
-                            src="/football.png" 
-                            alt="football" 
-                            width={100} 
-                            height={120} 
+                        <Image
+                            src="/football.png"
+                            alt="football"
+                            width={100}
+                            height={120}
                             className="relative z-20"
                         />
                     </motion.div>
@@ -71,19 +73,19 @@ const MobileHeroSection = () => {
                         transition={{ duration: 1, delay: 2 }}
                         className="relative w-full h-[200px]"
                     >
-                        <Image 
-                            src="/player-left.png" 
-                            alt="player-left" 
-                            width={250} 
-                            height={80} 
-                            className="absolute -bottom-12 -left-16 " 
+                        <Image
+                            src="/player-left.png"
+                            alt="player-left"
+                            width={250}
+                            height={80}
+                            className="absolute -bottom-12 -left-16 "
                         />
-                        <Image 
-                            src="/player-right.png" 
-                            alt="player-right" 
-                            width={230} 
-                            height={80} 
-                            className="absolute -bottom-12 -right-0 rotate-12" 
+                        <Image
+                            src="/player-right.png"
+                            alt="player-right"
+                            width={230}
+                            height={80}
+                            className="absolute -bottom-12 -right-0 rotate-12"
                         />
                     </motion.div>
                 </div>
@@ -96,40 +98,40 @@ const MobileHeroSection = () => {
                 transition={{ duration: 1, delay: 2 }}
                 className="w-full h-full absolute top-0 left-0 z-[1] pointer-events-none"
             >
-                <Image 
-                    src="/box-1.png" 
-                    alt="box-1" 
-                    width={15} 
-                    height={6} 
-                    className="absolute bottom-10 right-4" 
+                <Image
+                    src="/box-1.png"
+                    alt="box-1"
+                    width={15}
+                    height={6}
+                    className="absolute bottom-10 right-4"
                 />
-                <Image 
-                    src="/Box-2.png" 
-                    alt="box-2" 
-                    width={12} 
-                    height={6} 
-                    className="absolute bottom-96 left-16" 
+                <Image
+                    src="/Box-2.png"
+                    alt="box-2"
+                    width={12}
+                    height={6}
+                    className="absolute bottom-96 left-16"
                 />
-                <Image 
-                    src="/circle.png" 
-                    alt="circle" 
-                    width={30} 
-                    height={30} 
-                    className="absolute bottom-[360px] right-16 opacity-40" 
+                <Image
+                    src="/circle.png"
+                    alt="circle"
+                    width={30}
+                    height={30}
+                    className="absolute bottom-[360px] right-16 opacity-40"
                 />
-                <Image 
-                    src="/circle-2.png" 
-                    alt="circle-2" 
-                    width={100} 
-                    height={60} 
-                    className="absolute bottom-[300px] -left-12 " 
+                <Image
+                    src="/circle-2.png"
+                    alt="circle-2"
+                    width={100}
+                    height={60}
+                    className="absolute bottom-[300px] -left-12 "
                 />
-                <Image 
-                    src="/circle.png" 
-                    alt="circle" 
-                    width={50} 
-                    height={50} 
-                    className="absolute bottom-20 right-32 opacity-40" 
+                <Image
+                    src="/circle.png"
+                    alt="circle"
+                    width={50}
+                    height={50}
+                    className="absolute bottom-20 right-32 opacity-40"
                 />
             </motion.div>
         </section>

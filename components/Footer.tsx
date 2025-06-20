@@ -8,9 +8,9 @@ export default function Footer() {
       {/* Main Footer Content */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         {/* Top Section with Navigation and Social Media */}
-        <div className="flex flex-col space-y-6 lg:space-y-0 lg:flex-row justify-between items-center lg:items-start mb-6 sm:mb-8">
+        {/* <div className="flex flex-col space-y-6 lg:space-y-0 lg:flex-row justify-between items-center lg:items-start mb-6 sm:mb-8"> */}
           {/* Navigation Links */}
-          <nav className="flex flex-wrap justify-center lg:justify-start gap-4 sm:gap-6 w-full lg:w-auto">
+          {/* <nav className="flex flex-wrap justify-center lg:justify-start gap-4 sm:gap-6 w-full lg:w-auto">
             <Link href="/" className="text-sm sm:text-base text-gray-300 hover:text-white transition-colors">
               Home
             </Link>
@@ -26,10 +26,10 @@ export default function Footer() {
             <Link href="" className="text-sm sm:text-base text-gray-300 hover:text-white transition-colors">
               Contact Us
             </Link>
-          </nav>
+          </nav> */}
 
           {/* Social Media Icons */}
-          <div className="flex items-center gap-4 sm:gap-6 w-full lg:w-auto justify-center lg:justify-start">
+          {/* <div className="flex items-center gap-4 sm:gap-6 w-full lg:w-auto justify-center lg:justify-start">
             <span className="text-sm sm:text-base text-gray-300">Follow Us:</span>
             <div className="flex gap-3 sm:gap-4">
               <a href="#" className="text-gray-300 hover:text-white transition-colors" aria-label="Instagram">
@@ -47,8 +47,8 @@ export default function Footer() {
                 </svg>
               </a>
             </div>
-          </div>
-        </div>
+          </div> */}
+        {/* </div> */}
 
         {/* Disclaimer Text */}
         <div className="text-center mb-6 sm:mb-8">
