@@ -1,219 +1,197 @@
-/* app/bingogame/page.tsx */
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-////////////////////////////////////////////////////////////////////////////////
-// → Types that exactly mirror your API payload
-////////////////////////////////////////////////////////////////////////////////
 type Category = {
   _id: string;
   name: string;
   type: string;
   slug: string;
-  __v: number;
 };
 
 type Player = {
   _id: string;
   name: string;
+  image?: string;
   categories: Category[];
 };
 
-type Match = {
+type PlayerGrid = {
   playerId: string;
-  categoryIds: string[];
-  locked: boolean;
-};
-
-type GameResponse = {
-  gameId: string;
-  card: Category[][];
-  players: Player[];
-  matches: Match[];
-};
-
-////////////////////////////////////////////////////////////////////////////////
-// → Helper that colours a grid cell
-////////////////////////////////////////////////////////////////////////////////
-const getCellClass = (status: CellStatus) => {
-  switch (status) {
-    case 'correct':
-      return 'bg-green-500 text-white';
-    case 'wrong':
-      return 'bg-red-500 text-white';
-    default:
-      return 'bg-[#23243a] text-white/90 hover:ring-2 hover:ring-[#ffd60066] cursor-pointer';
-  }
+  correctCategoryIds: string[];
+  correctCategoryNames: string[];
+  grid: Category[][];
 };
 
 type CellStatus = 'default' | 'correct' | 'wrong';
 
-////////////////////////////////////////////////////////////////////////////////
-// → Component
-////////////////////////////////////////////////////////////////////////////////
+const getCellClass = (status: CellStatus) => {
+  switch (status) {
+    case 'correct': return 'bg-green-500 text-white';
+    case 'wrong': return 'bg-red-500 text-white';
+    default: return 'bg-[#23243a] text-white/90 hover:ring-2 hover:ring-[#ffd60066] cursor-pointer';
+  }
+};
+
 const BingoGame: React.FC = () => {
-  ////////////////////////////////////////////////////////////////////////////
-  // ❶  STATE
-  ////////////////////////////////////////////////////////////////////////////
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentGrid, setCurrentGrid] = useState<Category[][]>([]);
+  const [correctIds, setCorrectIds] = useState<string[]>([]);
+  const [cellStatus, setCellStatus] = useState<Record<string, CellStatus>>({});
+  const [lockedCells, setLockedCells] = useState<Set<string>>(new Set());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [card, setCard] = useState<Category[][]>([]);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
+  const currentPlayer = players[currentIndex];
 
-  const [currentIdx, setCurrentIdx] = useState(0);          // which match/player is active
-  const [cellStatus, setCellStatus] = useState<Record<string, CellStatus>>({}); // categoryId ↦ status
-
-  ////////////////////////////////////////////////////////////////////////////
-  // ❷  FETCH on mount
-  ////////////////////////////////////////////////////////////////////////////
   useEffect(() => {
-    const loadGame = async () => {
+    const fetchInitialData = async () => {
       try {
-        setLoading(true);
-        // 🔄  CHANGE THIS URL if your endpoint lives elsewhere
-        const { data } = await axios.get<GameResponse>('http://localhost:5000/bingo/game');
-        setCard(data.card);
-        setPlayers(data.players);
-        setMatches(data.matches);
-      } catch (e) {
-        setError('Could not load game.');
+        const res = await axios.get<Player[]>('http://localhost:5000/bingo/players/random');
+        setPlayers(res.data);
+        setCurrentIndex(0);
+      } catch (err) {
+        setError('Failed to load players.');
       } finally {
         setLoading(false);
       }
     };
-    loadGame();
+    fetchInitialData();
   }, []);
 
-  ////////////////////////////////////////////////////////////////////////////
-  // ❸  Derived helpers
-  ////////////////////////////////////////////////////////////////////////////
-  const matchesLeft = matches.length - currentIdx;
-  const currentMatch = matches[currentIdx];
-
   useEffect(() => {
-    if (currentMatch && card.length) {
-      // console.log('Correct category IDs:', currentMatch.categoryIds);
+    const fetchGrid = async () => {
+      if (!currentPlayer) return;
+      try {
+        const res = await axios.get<PlayerGrid>('http://localhost:5000/bingo/player-grid', {
+          params: { playerId: currentPlayer._id },
+        });
 
-      const correctNames = card
-        .flat() // flatten 2D array to 1D
-        .filter(box => currentMatch.categoryIds.includes(box._id))
-        .map(box => box.name);
+        const rawGrid = res.data.grid;
+        const newStatus: Record<string, CellStatus> = {};
 
-      console.log('✅ Correct category names:', correctNames);
-    }
-  }, [currentMatch, card]);
+        rawGrid.forEach((row, rowIndex) => {
+          row.forEach((cat, colIndex) => {
+            const key = `${rowIndex}-${colIndex}`;
+            if (lockedCells.has(key)) {
+              newStatus[cat._id] = 'correct';
+            }
+          });
+        });
 
+        setCurrentGrid(rawGrid);
+        setCorrectIds(res.data.correctCategoryIds);
+        setCellStatus(newStatus);
 
-  const currentPlayer = players.find((p) => p._id === currentMatch?.playerId);
+        console.log('✅ Correct:', res.data.correctCategoryNames);
+      } catch (err) {
+        console.error('Failed to load player grid:', err);
+      }
+    };
 
-  ////////////////////////////////////////////////////////////////////////////
-  // ❹  Move to next player (skip / after answer)
-  ////////////////////////////////////////////////////////////////////////////
-  const advancePlayer = useCallback(() => {
-    // clear ONLY the red “wrong” cells, keep greens locked
-    setCellStatus((prev) => {
-      const cleaned: Record<string, CellStatus> = {};
-      Object.entries(prev).forEach(([id, status]) => {
-        if (status === 'correct') cleaned[id] = 'correct';
-      });
-      return cleaned;
-    });
-    setCurrentIdx((idx) => Math.min(idx + 1, matches.length)); // clamp
-  }, [matches.length]);
+    fetchGrid();
+  }, [currentPlayer]);
 
-  ////////////////////////////////////////////////////////////////////////////
-  // ❺  Cell click handler
-  ////////////////////////////////////////////////////////////////////////////
-  const handleCellClick = (cat: Category) => {
-    if (!currentMatch) return;
-    const already = cellStatus[cat._id];
-    if (already === 'correct' || already === 'wrong') return;
+  const isGameWon = (grid: Category[][], status: Record<string, CellStatus>) => {
+  return grid.every(row =>
+    row.every(cat => status[cat._id] === 'correct')
+  );
+};
 
-    const isCorrect = currentMatch.categoryIds.includes(cat._id);
+  const handleCellClick = (cat: Category, row: number, col: number) => {
+    const key = `${row}-${col}`;
+    if (cellStatus[cat._id] || lockedCells.has(key)) return;
+
+    const isCorrect = correctIds.includes(cat._id);
+
+    const updatedStatus = {
+      ...cellStatus,
+      [cat._id]: isCorrect ? 'correct' : 'wrong',
+    };
+    setCellStatus(updatedStatus);
 
     if (isCorrect) {
-      setCellStatus((prev) => ({ ...prev, [cat._id]: 'correct' }));
-      setTimeout(() => advancePlayer(), 400); // move to next player right away
+      const updatedLocked = new Set(lockedCells);
+      updatedLocked.add(key);
+      setLockedCells(updatedLocked);
+
+      setTimeout(() => {
+        if (isGameWon(currentGrid, updatedStatus)) {
+          alert('🎉 Bingo! You won!');
+          return;
+        }
+        setCurrentIndex(i => i + 1);
+      }, 200);
     } else {
-      setCellStatus((prev) => ({ ...prev, [cat._id]: 'wrong' }));
-      setTimeout(() => advancePlayer(), 400); // move to next player
+      setTimeout(() => {
+        setCurrentIndex(i => i + 2);
+      }, 400);
     }
   };
 
+  const handleSkip = () => {
+    setCurrentIndex(i => i + 1);
+  };
 
-  ////////////////////////////////////////////////////////////////////////////
-  // ❻  New Game = reload page (simplest) — you can call the API again if you prefer
-  ////////////////////////////////////////////////////////////////////////////
   const startNewGame = () => {
+    setLockedCells(new Set());
     window.location.reload();
   };
 
-  ////////////////////////////////////////////////////////////////////////////
-  // ❼  Render
-  ////////////////////////////////////////////////////////////////////////////
-  if (loading) return <p className="text-center text-white mt-20">Loading…</p>;
-  if (error) return <p className="text-center text-red-500 mt-20">{error}</p>;
-  if (!currentMatch) {
+  if (loading) return <p className="text-white mt-10">Loading game…</p>;
+  if (error) return <p className="text-red-500 mt-10">{error}</p>;
+  if (!currentPlayer || currentIndex >= players.length) {
     return (
       <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4">
-        <h2 className="text-2xl font-bold">🎉 Finished!</h2>
+        <h2 className="text-2xl font-bold">🎉 Game Over</h2>
         <button onClick={startNewGame} className="bg-emerald-500 px-6 py-2 rounded-md text-black font-semibold">
-          New Game
+          Start Again
         </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] px-4">
-      {/* ===== TOP BAR ===== */}
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6">
       <div className="flex items-center justify-between w-full max-w-lg bg-[#262346] rounded-md px-4 py-2 mb-4">
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 rounded-full bg-white text-[#3b27ff] text-xs font-bold grid place-items-center">
-            {currentPlayer?.name?.[0] ?? '?'}
+            {currentPlayer.name[0]}
           </div>
-          <span className="text-white font-medium">
-            {currentPlayer?.name || 'Player'}
-          </span>
+          <span className="text-white font-medium">{currentPlayer.name}</span>
         </div>
-        <span className="text-xs text-white/70">{matchesLeft} players left</span>
+        <span className="text-xs text-white/70">
+          {players.length - currentIndex} left
+        </span>
       </div>
 
-      {/* ===== GRID ===== */}
       <div className="bg-[#1e2033] p-4 rounded-md">
-        <div className="grid grid-cols-5 grid-rows-5 gap-2">
-          {card.flat().map((cat) => {
-            const status = cellStatus[cat._id] ?? 'default';
-            return (
-              <div
-                key={cat._id}
-                onClick={() => handleCellClick(cat)}
-                className={`${getCellClass(status)} text-[11px] font-medium leading-tight flex items-center justify-center text-center w-28 h-16 rounded`}
-              >
-                {cat.name}
-              </div>
-            );
-          })}
+        <div className="flex flex-col gap-2">
+          {currentGrid.map((row, rowIndex) => (
+            <div key={rowIndex} className="grid grid-cols-4 gap-2">
+              {row.map((cat, colIndex) => (
+                <div
+                  key={`${cat._id}-${colIndex}`}
+                  className={`${getCellClass(cellStatus[cat._id] ?? 'default')} text-[11px] font-medium leading-tight flex items-center justify-center text-center w-28 h-16 rounded`}
+                  onClick={() => handleCellClick(cat, rowIndex, colIndex)}
+                >
+                  {cellStatus[cat._id] === 'correct' ? '🔒' : cat.name}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ===== CONTROLS ===== */}
+
       <div className="flex justify-between w-full max-w-lg mt-8">
-        <button
-          className="bg-[#ffd600] text-black font-semibold px-8 py-2 rounded"
-          onClick={advancePlayer}
-        >
+        <button className="bg-[#ffd600] text-black font-semibold px-8 py-2 rounded" onClick={handleSkip}>
           Skip
         </button>
-
-        <button
-          className="bg-emerald-500 text-black font-semibold px-8 py-2 rounded"
-          onClick={startNewGame}
-        >
+        <button className="bg-emerald-500 text-black font-semibold px-8 py-2 rounded" onClick={startNewGame}>
           New Game
         </button>
       </div>
