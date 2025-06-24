@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { start } from 'repl';
 
 type Category = {
   _id: string;
@@ -71,22 +72,40 @@ const BingoGame: React.FC = () => {
         });
 
         const rawGrid = res.data.grid;
+        const injectedGrid = [...rawGrid]; // or clone it if necessary
         const newStatus: Record<string, CellStatus> = {};
+        const availablePositions: { row: number; col: number }[] = [];
 
-        rawGrid.forEach((row, rowIndex) => {
+        // STEP 1: Identify locked positions and collect available ones
+        injectedGrid.forEach((row, rowIndex) => {
           row.forEach((cat, colIndex) => {
             const key = `${rowIndex}-${colIndex}`;
             if (lockedCells.has(key)) {
-              newStatus[cat._id] = 'correct';
+              newStatus[key] = 'correct'; // ✅ lock by position!
+            } else {
+              availablePositions.push({ row: rowIndex, col: colIndex });
             }
           });
         });
 
-        setCurrentGrid(rawGrid);
+        // STEP 2: Inject correct categories into available positions
+        const correctCategories = rawGrid
+          .flat()
+          .filter(cat => res.data.correctCategoryIds.includes(cat._id));
+        let correctIndex = 0;
+
+        for (let i = 0; i < availablePositions.length && correctIndex < correctCategories.length; i++) {
+          const { row, col } = availablePositions[i];
+          injectedGrid[row][col] = correctCategories[correctIndex];
+          correctIndex++;
+        }
+
+        // STEP 3: Save updated state
+        setCurrentGrid(injectedGrid);
         setCorrectIds(res.data.correctCategoryIds);
         setCellStatus(newStatus);
 
-        console.log('✅ Correct:', res.data.correctCategoryNames);
+        console.log('✅ Correct category names:', res.data.correctCategoryNames);
       } catch (err) {
         console.error('Failed to load player grid:', err);
       }
@@ -96,31 +115,29 @@ const BingoGame: React.FC = () => {
   }, [currentPlayer]);
 
   const isGameWon = (grid: Category[][], status: Record<string, CellStatus>) => {
-  return grid.every(row =>
-    row.every(cat => status[cat._id] === 'correct')
-  );
+    return grid.every((row, rowIndex) =>
+      row.every((_, colIndex) => status[`${rowIndex}-${colIndex}`] === 'correct')
+    );
 };
 
   const handleCellClick = (cat: Category, row: number, col: number) => {
     const key = `${row}-${col}`;
-    if (cellStatus[cat._id] || lockedCells.has(key)) return;
+    if (lockedCells.has(key) || cellStatus[key] === 'correct') return;
 
     const isCorrect = correctIds.includes(cat._id);
 
     const updatedStatus = {
       ...cellStatus,
-      [cat._id]: isCorrect ? 'correct' : 'wrong',
+      [key]: isCorrect ? 'correct' : 'wrong',
     };
     setCellStatus(updatedStatus);
 
     if (isCorrect) {
-      const updatedLocked = new Set(lockedCells);
-      updatedLocked.add(key);
-      setLockedCells(updatedLocked);
-
+      setLockedCells(prev => new Set(prev).add(key));
       setTimeout(() => {
         if (isGameWon(currentGrid, updatedStatus)) {
           alert('🎉 Bingo! You won!');
+          startNewGame();
           return;
         }
         setCurrentIndex(i => i + 1);
@@ -172,15 +189,18 @@ const BingoGame: React.FC = () => {
         <div className="flex flex-col gap-2">
           {currentGrid.map((row, rowIndex) => (
             <div key={rowIndex} className="grid grid-cols-4 gap-2">
-              {row.map((cat, colIndex) => (
-                <div
-                  key={`${cat._id}-${colIndex}`}
-                  className={`${getCellClass(cellStatus[cat._id] ?? 'default')} text-[11px] font-medium leading-tight flex items-center justify-center text-center w-28 h-16 rounded`}
-                  onClick={() => handleCellClick(cat, rowIndex, colIndex)}
-                >
-                  {cellStatus[cat._id] === 'correct' ? '🔒' : cat.name}
-                </div>
-              ))}
+              {row.map((cat, colIndex) => {
+                const key = `${rowIndex}-${colIndex}`;
+                return (
+                  <div
+                    key={key}
+                    className={`${getCellClass(cellStatus[key] ?? 'default')} text-[11px] font-medium leading-tight flex items-center justify-center text-center w-28 h-16 rounded`}
+                    onClick={() => handleCellClick(cat, rowIndex, colIndex)}
+                  >
+                    {cellStatus[key] === 'correct' ? '🔒' : cat.name}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>
