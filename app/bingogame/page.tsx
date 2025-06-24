@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { start } from 'repl';
 
 type Category = {
   _id: string;
@@ -42,7 +41,8 @@ const BingoGame: React.FC = () => {
   const [correctIds, setCorrectIds] = useState<string[]>([]);
   const [cellStatus, setCellStatus] = useState<Record<string, CellStatus>>({});
   const [lockedCells, setLockedCells] = useState<Set<string>>(new Set());
-
+  const [timer, setTimer] = useState(10);
+  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,12 +106,33 @@ const BingoGame: React.FC = () => {
         setCellStatus(newStatus);
 
         console.log('✅ Correct category names:', res.data.correctCategoryNames);
+        setTimer(10); // Reset timer
       } catch (err) {
         console.error('Failed to load player grid:', err);
       }
     };
 
     fetchGrid();
+  }, [currentPlayer]);
+
+  // ⏱️ Timer Logic
+  useEffect(() => {
+    if (intervalId) clearInterval(intervalId);
+
+    const id = setInterval(() => {
+      setTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(id);
+          setCurrentIndex(i => i + 1); // Auto skip
+          return 10;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    setIntervalId(id);
+
+    return () => clearInterval(id);
   }, [currentPlayer]);
 
   const isGameWon = (grid: Category[][], status: Record<string, CellStatus>) => {
@@ -123,6 +144,7 @@ const BingoGame: React.FC = () => {
   const handleCellClick = (cat: Category, row: number, col: number) => {
     const key = `${row}-${col}`;
     if (lockedCells.has(key) || cellStatus[key] === 'correct') return;
+    if (intervalId) clearInterval(intervalId);
 
     const isCorrect = correctIds.includes(cat._id);
 
@@ -150,10 +172,12 @@ const BingoGame: React.FC = () => {
   };
 
   const handleSkip = () => {
+    if (intervalId) clearInterval(intervalId);
     setCurrentIndex(i => i + 1);
   };
 
   const startNewGame = () => {
+    if (intervalId) clearInterval(intervalId);
     setLockedCells(new Set());
     window.location.reload();
   };
@@ -161,6 +185,7 @@ const BingoGame: React.FC = () => {
   if (loading) return <p className="text-white mt-10">Loading game…</p>;
   if (error) return <p className="text-red-500 mt-10">{error}</p>;
   if (!currentPlayer || currentIndex >= players.length) {
+    if (intervalId) clearInterval(intervalId);
     return (
       <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4">
         <h2 className="text-2xl font-bold">🎉 Game Over</h2>
@@ -173,16 +198,28 @@ const BingoGame: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6">
-      <div className="flex items-center justify-between w-full max-w-lg bg-[#262346] rounded-md px-4 py-2 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-6 h-6 rounded-full bg-white text-[#3b27ff] text-xs font-bold grid place-items-center">
-            {currentPlayer.name[0]}
+      <div className="w-full max-w-lg bg-[#262346] rounded-md px-4 py-3 mb-4">
+        <div className="flex items-center justify-between flex-wrap gap-y-2">
+
+          {/* Player Info */}
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-full bg-white text-[#3b27ff] text-sm font-bold grid place-items-center">
+              {currentPlayer.name[0]}
+            </div>
+            <span className="text-white font-medium text-sm">{currentPlayer.name}</span>
           </div>
-          <span className="text-white font-medium">{currentPlayer.name}</span>
+
+          {/* Remaining Players */}
+          <span className="text-xs text-white/70 whitespace-nowrap">
+            {players.length - currentIndex} players left
+          </span>
+
+          {/* Timer */}
+          <div className="text-xs text-white/70 flex items-center gap-1 whitespace-nowrap">
+            ⏱️ <span>{timer}s left</span>
+          </div>
+
         </div>
-        <span className="text-xs text-white/70">
-          {players.length - currentIndex} left
-        </span>
       </div>
 
       <div className="bg-[#1e2033] p-4 rounded-md">
