@@ -43,6 +43,7 @@ const BingoGame: React.FC = () => {
   const [lockedCells, setLockedCells] = useState<Set<string>>(new Set());
   const [timer, setTimer] = useState(10);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [gridLoading, setGridLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +67,7 @@ const BingoGame: React.FC = () => {
   useEffect(() => {
     const fetchGrid = async () => {
       if (!currentPlayer) return;
+      setGridLoading(true);
       try {
         const res = await axios.get<PlayerGrid>('http://localhost:5000/bingo/player-grid', {
           params: { playerId: currentPlayer._id },
@@ -109,6 +111,8 @@ const BingoGame: React.FC = () => {
         setTimer(10); // Reset timer
       } catch (err) {
         console.error('Failed to load player grid:', err);
+      } finally {
+        setGridLoading(false);
       }
     };
 
@@ -123,7 +127,7 @@ const BingoGame: React.FC = () => {
       setTimer(prev => {
         if (prev <= 1) {
           clearInterval(id);
-          setCurrentIndex(i => i + 1); // Auto skip
+          setCurrentIndex(i => i + 1);
           return 10;
         }
         return prev - 1;
@@ -139,7 +143,7 @@ const BingoGame: React.FC = () => {
     return grid.every((row, rowIndex) =>
       row.every((_, colIndex) => status[`${rowIndex}-${colIndex}`] === 'correct')
     );
-};
+  };
 
   const handleCellClick = (cat: Category, row: number, col: number) => {
     const key = `${row}-${col}`;
@@ -197,7 +201,15 @@ const BingoGame: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6 relative">
+      {/* LOADING OVERLAY */}
+      {gridLoading && (
+        <div className="absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+          <div className="text-white font-semibold text-lg animate-pulse">Loading player grid…</div>
+        </div>
+      )}
+
+      {/* HEADER */}
       <div className="w-full max-w-lg bg-[#262346] rounded-md px-4 py-3 mb-4">
         <div className="flex items-center justify-between flex-wrap gap-y-2">
 
@@ -222,6 +234,7 @@ const BingoGame: React.FC = () => {
         </div>
       </div>
 
+      {/* GRID */}
       <div className="bg-[#1e2033] p-4 rounded-md">
         <div className="flex flex-col gap-2">
           {currentGrid.map((row, rowIndex) => (
@@ -243,7 +256,7 @@ const BingoGame: React.FC = () => {
         </div>
       </div>
 
-
+      {/* CONTROLS */}
       <div className="flex justify-between w-full max-w-lg mt-8">
         <button className="bg-[#ffd600] text-black font-semibold px-8 py-2 rounded" onClick={handleSkip}>
           Skip
