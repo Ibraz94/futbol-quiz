@@ -41,7 +41,7 @@ const BingoGame: React.FC = () => {
   const [correctIds, setCorrectIds] = useState<string[]>([]);
   const [cellStatus, setCellStatus] = useState<Record<string, CellStatus>>({});
   const [lockedCells, setLockedCells] = useState<Set<string>>(new Set());
-  const [timer, setTimer] = useState(10);
+  const [timer, setTimer] = useState(30);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
   const [gridLoading, setGridLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -49,9 +49,13 @@ const BingoGame: React.FC = () => {
   const [wildcardUsed, setWildcardUsed] = useState(false);
 
   const currentPlayer = players[currentIndex];
+  const timerTriggeredRef = React.useRef(false);
 
   const handlePlayWildcard = async () => {
+    timerTriggeredRef.current = false;
     if (wildcardUsed || !currentGrid.length) return;
+    if (intervalId) clearInterval(intervalId);
+    timerTriggeredRef.current = true;
 
     setGridLoading(true); // Show loader
 
@@ -80,7 +84,7 @@ const BingoGame: React.FC = () => {
 
     // Move to next player after short delay
     setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
+      goToNextPlayer(1);
       setGridLoading(true);
     }, 500);
   };
@@ -130,10 +134,11 @@ const BingoGame: React.FC = () => {
         const correctCategories = rawGrid
           .flat()
           .filter(cat => res.data.correctCategoryIds.includes(cat._id));
+        const shuffledPositions = [...availablePositions].sort(() => Math.random() - 0.5);
         let correctIndex = 0;
 
-        for (let i = 0; i < availablePositions.length && correctIndex < correctCategories.length; i++) {
-          const { row, col } = availablePositions[i];
+        for (let i = 0; i < shuffledPositions.length && correctIndex < correctCategories.length; i++) {
+          const { row, col } = shuffledPositions[i];
           injectedGrid[row][col] = correctCategories[correctIndex];
           correctIndex++;
         }
@@ -144,7 +149,7 @@ const BingoGame: React.FC = () => {
         setCellStatus(newStatus);
 
         console.log('✅ Correct category names:', res.data.correctCategoryNames);
-        setTimer(10); // Reset timer
+        setTimer(30);
       } catch (err) {
         console.error('Failed to load player grid:', err);
       } finally {
@@ -157,14 +162,18 @@ const BingoGame: React.FC = () => {
 
   // ⏱️ Timer Logic
   useEffect(() => {
+    timerTriggeredRef.current = false;
     if (intervalId) clearInterval(intervalId);
 
     const id = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          clearInterval(id);
-          setCurrentIndex(i => i + 1);
-          return 10;
+          if (!timerTriggeredRef.current) {
+            timerTriggeredRef.current = true;
+            clearInterval(id);
+            goToNextPlayer(1);
+          }
+          return 30;
         }
         return prev - 1;
       });
@@ -181,10 +190,20 @@ const BingoGame: React.FC = () => {
     );
   };
 
+  const goToNextPlayer = (skipCount: number = 1) => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+    setCurrentIndex(prev => prev + skipCount);
+  };
+
   const handleCellClick = (cat: Category, row: number, col: number) => {
     const key = `${row}-${col}`;
     if (lockedCells.has(key) || cellStatus[key] === 'correct') return;
     if (intervalId) clearInterval(intervalId);
+
+    timerTriggeredRef.current = true; // prevent interval from also skipping
 
     const isCorrect = correctIds.includes(cat._id);
 
@@ -202,22 +221,24 @@ const BingoGame: React.FC = () => {
           startNewGame();
           return;
         }
-        setCurrentIndex(i => i + 1);
+        goToNextPlayer(1);
       }, 200);
     } else {
       setTimeout(() => {
-        setCurrentIndex(i => i + 2);
+        goToNextPlayer(2);
       }, 400);
     }
   };
 
   const handleSkip = () => {
+    timerTriggeredRef.current = true;
     if (intervalId) clearInterval(intervalId);
-    setCurrentIndex(i => i + 1);
+    goToNextPlayer(1);
   };
 
   const startNewGame = () => {
     if (intervalId) clearInterval(intervalId);
+    timerTriggeredRef.current = true;
     setLockedCells(new Set());
     window.location.reload();
   };
@@ -267,7 +288,7 @@ const BingoGame: React.FC = () => {
             >
               Play Wildcard
             </button>
-            <div className="flex items-center gap-2 text-xs text-white/70 ml-8">
+            <div className="flex items-center gap-1 text-xs text-white/70 ml-8">
               {/* <span className="text-white text-base">ℹ️</span> */}
               ⏱️ <span>{timer}s left</span>
             </div>
