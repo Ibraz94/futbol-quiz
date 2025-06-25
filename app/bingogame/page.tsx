@@ -46,8 +46,44 @@ const BingoGame: React.FC = () => {
   const [gridLoading, setGridLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [wildcardUsed, setWildcardUsed] = useState(false);
 
   const currentPlayer = players[currentIndex];
+
+  const handlePlayWildcard = async () => {
+    if (wildcardUsed || !currentGrid.length) return;
+
+    setGridLoading(true); // Show loader
+
+    const updatedStatus = { ...cellStatus };
+    const newLockedCells = new Set(lockedCells);
+    let lockedCount = 0;
+
+    for (let row = 0; row < currentGrid.length; row++) {
+      for (let col = 0; col < currentGrid[row].length; col++) {
+        const cat = currentGrid[row][col];
+        const key = `${row}-${col}`;
+
+        if (correctIds.includes(cat._id) && !newLockedCells.has(key)) {
+          updatedStatus[key] = 'correct';
+          newLockedCells.add(key);
+          lockedCount++;
+          if (lockedCount === correctIds.length) break;
+        }
+      }
+      if (lockedCount === correctIds.length) break;
+    }
+
+    setCellStatus(updatedStatus);
+    setLockedCells(newLockedCells);
+    setWildcardUsed(true);
+
+    // Move to next player after short delay
+    setTimeout(() => {
+      setCurrentIndex(prev => prev + 1);
+      setGridLoading(true);
+    }, 500);
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -210,32 +246,45 @@ const BingoGame: React.FC = () => {
       )}
 
       {/* HEADER */}
-      <div className="w-full max-w-lg bg-[#262346] rounded-md px-4 py-3 mb-4">
-        <div className="flex items-center justify-between flex-wrap gap-y-2">
+      <div className="w-full max-w-3xl bg-[#262346] rounded-md px-6 py-3 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-4">
 
-          {/* Player Info */}
-          <div className="flex items-center gap-3">
+          {/* Left: Player Info */}
+          <div className="flex items-center gap-3 justify-start">
             <div className="w-7 h-7 rounded-full bg-white text-[#3b27ff] text-sm font-bold grid place-items-center">
               {currentPlayer.name[0]}
             </div>
             <span className="text-white font-medium text-sm">{currentPlayer.name}</span>
           </div>
 
-          {/* Remaining Players */}
-          <span className="text-xs text-white/70 whitespace-nowrap">
-            {players.length - currentIndex} players left
-          </span>
-
-          {/* Timer */}
-          <div className="text-xs text-white/70 flex items-center gap-1 whitespace-nowrap">
-            ⏱️ <span>{timer}s left</span>
+          {/* Center: Wildcard & Timer */}
+          <div className="flex items-center justify-center gap-4">
+            <button
+              disabled={wildcardUsed}
+              className={`${wildcardUsed ? 'opacity-50 cursor-not-allowed' : 'bg-[#fbbc05] hover:bg-yellow-400'
+                } text-black text-sm font-bold py-1 px-3 rounded-md shadow`}
+              onClick={handlePlayWildcard}
+            >
+              Play Wildcard
+            </button>
+            <div className="flex items-center gap-2 text-xs text-white/70 ml-8">
+              {/* <span className="text-white text-base">ℹ️</span> */}
+              ⏱️ <span>{timer}s left</span>
+            </div>
           </div>
 
+          {/* Right: Remaining Players */}
+          <div className="flex justify-end">
+            <span className="text-xs text-white/70 whitespace-nowrap">
+              {players.length - currentIndex} PLAYERS LEFT
+            </span>
+          </div>
         </div>
       </div>
 
       {/* GRID */}
-      <div className="bg-[#1e2033] p-4 rounded-md">
+      {/* GRID */}
+      <div className="w-full max-w-3xl bg-[#1e2033] p-4 rounded-md mx-auto">
         <div className="flex flex-col gap-2">
           {currentGrid.map((row, rowIndex) => (
             <div key={rowIndex} className="grid grid-cols-4 gap-2">
@@ -244,7 +293,7 @@ const BingoGame: React.FC = () => {
                 return (
                   <div
                     key={key}
-                    className={`${getCellClass(cellStatus[key] ?? 'default')} text-[11px] font-medium leading-tight flex items-center justify-center text-center w-28 h-16 rounded`}
+                    className={`${getCellClass(cellStatus[key] ?? 'default')} text-xs font-medium leading-tight flex items-center justify-center text-center w-38 h-16 rounded transition-all duration-200`}
                     onClick={() => handleCellClick(cat, rowIndex, colIndex)}
                   >
                     {cellStatus[key] === 'correct' ? '🔒' : cat.name}
@@ -257,7 +306,7 @@ const BingoGame: React.FC = () => {
       </div>
 
       {/* CONTROLS */}
-      <div className="flex justify-between w-full max-w-lg mt-8">
+      <div className="w-full max-w-3xl flex justify-between mt-8 mx-auto">
         <button className="bg-[#ffd600] text-black font-semibold px-8 py-2 rounded" onClick={handleSkip}>
           Skip
         </button>
