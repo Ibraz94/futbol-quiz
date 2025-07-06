@@ -27,8 +27,6 @@ export default function Games() {
   const containerRef = useRef(null);
   const isInView = useInView(containerRef, { once: true, amount: 0.3 });
 
-  console.log(project)
-
   const handleSlideChange = (swiper: any) => {
     const currentIndex = swiper.activeIndex;
     setProject(featuredGames[currentIndex])
