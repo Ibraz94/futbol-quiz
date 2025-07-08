@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import Image from "next/image";
-
+import { useState } from "react"
 
 const HeroSection = () => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
     const router = useRouter();
     return (
         <section className="relative h-dvh overflow-hidden bg-gradient-to-b from-[#111827] to-black hidden md:block">
@@ -130,11 +131,49 @@ const HeroSection = () => {
                 <div className="flex flex-col items-center justify-center pt-2">
                     <p className="text-lg md:text-xl font-light text-center max-w-[600px]">Lorem ipsum dolor sit amet, consectetuer adipiscing elit.<br className="hidden md:block" /> Aenean commodo ligula eget dolor.</p>
                     <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-6 mt-6 md:mt-8">
-                        <Button variant="outline" className="w-[160px] ">START QUIZ</Button>
+                        <Button variant="outline" className="w-[160px]" onClick={() => setIsModalOpen(true)}>START QUIZ</Button>
                         <Button variant="outline" className="w-[160px] " onClick={() => router.push("/bingogame")}>JOIN LIVE GAME</Button>
                     </div>
                 </div>
             </motion.div>
+            {isModalOpen && (
+                <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-md z-50">
+                    <div className="bg-[#1f1f2ecc] text-white rounded-xl p-8 max-w-2xl w-full text-left shadow-xl relative">
+                        <h2 className="text-2xl font-bold mb-6">Career Forecast</h2>
+
+                        <ul className="space-y-2 text-sm leading-normal">
+                            <li>⏱️ You have 20 seconds for each football player.</li>
+                            <li className="text-green-400">✔️ Correct answer: 20 points + extra points for the remaining seconds.</li>
+                            <li className="text-red-400">❌ If you make a mistake or pass, you won't get any points.</li>
+                            <li className="text-orange-400">🔥 3 correct answers in a row: +50 points. If you guess all the players: +200 points.</li>
+                        </ul>
+
+                        <p className="mt-5 text-sm">
+                            Are you ready? Select the game mode below and the game will start! 🎉
+                        </p>
+
+                        <div className="flex flex-col md:flex-row justify-center gap-4 mt-6">
+                            <button
+                                className="bg-[#5e5bff] hover:bg-[#4c49e0] transition text-white w-full md:w-1/2 px-4 py-3 rounded-lg font-semibold flex items-center justify-center gap-2"
+                                onClick={() => {
+                                    setIsModalOpen(false);
+                                    router.push("/quizgame");
+                                }}
+                            >
+                                Start Quiz
+                            </button>
+                        </div>
+
+                        <button
+                            className="absolute top-3 right-4 text-gray-300 hover:text-white text-2xl"
+                            onClick={() => setIsModalOpen(false)}
+                            aria-label="Close modal"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                </div>
+            )}
         </section>
 
     )
