@@ -107,7 +107,7 @@ const BingoGame: React.FC = () => {
       try {
         setGridLoading(true);
 
-        const res = await axios.get<{ grid: Category[][] }>('http://localhost:5000/bingo/csv-grid');
+        const res = await axios.get<{ grid: Category[][] }>('https://api.futbolquiz.staging.pegasync.com/bingo/csv-grid');
         const gridFromApi = res.data.grid;
 
         setCurrentGrid(gridFromApi);
@@ -138,7 +138,7 @@ const BingoGame: React.FC = () => {
 
   const fetchMatchingPlayer = async (categories: string[], excludeIds: string[] = []) => {
     try {
-      const response = await axios.post('http://localhost:5000/bingo/find-player', {
+      const response = await axios.post('https://api.futbolquiz.staging.pegasync.com/bingo/find-player', {
         categories,
         excludeIds,
       });

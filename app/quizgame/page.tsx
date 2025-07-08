@@ -28,7 +28,7 @@ const QuizGame: React.FC = () => {
 
   const fetchPlayers = async () => {
     try {
-      const res = await axios.get<Player[]>('http://localhost:5000/career/game');
+      const res = await axios.get<Player[]>('https://api.futbolquiz.staging.pegasync.com/career/game');
       setPlayers(res.data);
       setScore(0);
       setSeries(0);
