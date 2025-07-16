@@ -106,6 +106,81 @@ const QuizGame: React.FC = () => {
     nextPlayer(); // Don't reset series
   };
 
+  // Normalize season to 4-digit start year
+  const normaliseYear = (season: string): number => {
+    const firstPart = season.split('/')[0].trim();
+    if (firstPart.length === 4) return parseInt(firstPart, 10);
+    const yr = parseInt(firstPart, 10);
+    return yr < 30 ? 2000 + yr : 1900 + yr;
+  };
+
+  // Transform and sort the career data
+  const transformCareerData = (career: CareerEntry[]) => {
+    type AggregatedRow = {
+      team: string;
+      season: string;
+      matches: number;
+      goals: number;
+      assists: number;
+      sortKey: number;
+    };
+
+    const grouped: Record<string, any> = {};
+
+    for (const entry of career) {
+      const { team, season, matches, goals, assists } = entry;
+      const year = normaliseYear(season);
+
+      if (!grouped[team]) {
+        grouped[team] = {
+          team,
+          seasonStart: year,
+          seasonEnd: year,
+          matches,
+          goals,
+          assists,
+        };
+      } else {
+        const g = grouped[team];
+        g.seasonStart = Math.min(g.seasonStart, year);
+        g.seasonEnd = Math.max(g.seasonEnd, year);
+        g.matches += matches;
+        g.goals += goals;
+        g.assists += assists;
+      }
+    }
+
+    return Object.values(grouped)
+      .map((row: any) => ({
+        team: row.team,
+        season: row.seasonStart === row.seasonEnd
+          ? `${row.seasonStart}`
+          : `${row.seasonStart}-${row.seasonEnd}`,
+        matches: row.matches,
+        goals: row.goals,
+        assists: row.assists,
+        sortKey: row.seasonEnd,
+      }))
+      .sort((a, b) => {
+        if (b.sortKey !== a.sortKey) return b.sortKey - a.sortKey;
+
+        const getRange = (season: string) => {
+          if (!season.includes('-')) return { start: Number(season), length: 0 };
+          const [start, end] = season.split('-').map(Number);
+          return { start, length: end - start };
+        };
+
+        const aRange = getRange(a.season);
+        const bRange = getRange(b.season);
+
+        // Prefer shorter range (solo seasons) first if same end year
+        if (bRange.length !== aRange.length) return aRange.length - bRange.length;
+
+        // Tiebreaker: later season start comes first
+        return bRange.start - aRange.start;
+      });
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-[#0e1118] px-4 py-6 text-white">
       {/* Game Over Screen */}
@@ -120,9 +195,7 @@ const QuizGame: React.FC = () => {
       <div className="w-full max-w-4xl grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-[#1a1e2d] rounded-lg flex flex-col items-center py-4">
           <p className="text-sm text-gray-400">Duration</p>
-          <p className="text-xl font-bold text-blue-400">
-            ⏱️ {timer} <span className="ml-1 text-base">s</span>
-          </p>
+          <p className="text-xl font-bold text-blue-400">⏱️ {timer} s</p>
         </div>
         <div className="bg-[#1a1e2d] rounded-lg flex flex-col items-center py-4">
           <p className="text-sm text-gray-400">Score</p>
@@ -169,18 +242,18 @@ const QuizGame: React.FC = () => {
           <thead>
             <tr className="text-gray-400 border-b border-gray-600">
               <th className="py-3 px-4 text-sm sm:text-base">Years</th>
-              <th className="py-3 px-4 text-sm sm:text-base">Set</th>
+              <th className="py-3 px-4 text-sm sm:text-base">Team</th>
               <th className="py-3 px-4 text-sm sm:text-base">Match</th>
               <th className="py-3 px-4 text-sm sm:text-base">Goal</th>
             </tr>
           </thead>
           <tbody>
-            {currentPlayer?.career.map((entry, idx) => (
+            {transformCareerData(currentPlayer?.career || []).map(({ season, team, matches, goals }, idx) => (
               <tr key={idx} className="border-b border-gray-700 hover:bg-[#2a2f4a]/50">
-                <td className="py-3 px-4 text-sm sm:text-base">{entry.season}</td>
-                <td className="py-3 px-4 text-sm sm:text-base">{entry.team}</td>
-                <td className="py-3 px-4 text-sm sm:text-base">{entry.matches}</td>
-                <td className="py-3 px-4 text-sm sm:text-base">{entry.goals}</td>
+                <td className="py-3 px-4">{season}</td>
+                <td className="py-3 px-4">{team}</td>
+                <td className="py-3 px-4">{matches}</td>
+                <td className="py-3 px-4">{goals}</td>
               </tr>
             ))}
           </tbody>
