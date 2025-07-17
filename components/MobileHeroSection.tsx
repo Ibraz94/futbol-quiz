@@ -44,8 +44,9 @@ const MobileHeroSection = () => {
                             Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor.
                         </p>
                         <div className="flex flex-col items-center justify-center gap-4 mt-6">
-                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => setIsModalOpen(true)}>START QUIZ</Button>
-                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/bingogame")}>JOIN LIVE GAME</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => setIsModalOpen(true)}>START QUIZ GAME</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/bingogame")}>START BINGO GAME</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/teamgame")}>START CAREER GAME</Button>
                         </div>
                     </div>
                 </div>
