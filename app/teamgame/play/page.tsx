@@ -41,7 +41,7 @@ function PlayPageContent() {
     if (timer === 0 && !submitted) {
       setTimesUp(true);
       setSubmitted(true);
-    //   setResult("Time's up!");
+      setResult("Time's up!");
     }
     if (timer > 0 && !submitted) {
       const t = setTimeout(() => setTimer(timer - 1), 1000);
@@ -119,7 +119,7 @@ function PlayPageContent() {
             Submit
           </button>
         </form>
-        {timesUp && <div className="mt-4 text-center text-red-400 font-bold">Time's up!</div>}
+        {/* {timesUp && <div className="mt-4 text-center text-red-400 font-bold">Time's up!</div>} */}
         {win && <div className="mt-4 text-center text-green-400 font-bold text-2xl">You win! 🎉</div>}
         {submitted && result && !win && <div className={`mt-4 text-center font-bold ${result === "Correct!" ? "text-green-400" : "text-red-400"}`}>{result}</div>}
       </div>
