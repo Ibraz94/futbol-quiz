@@ -27,7 +27,7 @@ function TeamsPageContent() {
     }
     setLoading(true);
     axios
-      .get(`http://api.futbolquiz.staging.pegasync.com/leagues/${encodeURIComponent(league)}/teams`)
+      .get(`https://api.futbolquiz.staging.pegasync.com/leagues/${encodeURIComponent(league)}/teams`)
       .then((res) => {
         const allTeams = res.data.teams || [];
         // Shuffle and pick 10 teams

@@ -28,7 +28,7 @@ function PlayPageContent() {
   useEffect(() => {
     // Log all valid players for these teams for user help
     if (team1 && team2) {
-      axios.post("http://api.futbolquiz.staging.pegasync.com/leagues/valid-players", { team1, team2 })
+      axios.post("https://api.futbolquiz.staging.pegasync.com/leagues/valid-players", { team1, team2 })
         .then(res => {
           if (Array.isArray(res.data.players)) {
             console.log("Valid players for", team1, "&", team2, ":", res.data.players);
@@ -74,7 +74,7 @@ function PlayPageContent() {
     e.preventDefault();
     setSubmitted(true);
     try {
-      const res = await axios.post("http://api.futbolquiz.staging.pegasync.com/leagues/verify-player", {
+      const res = await axios.post("https://api.futbolquiz.staging.pegasync.com/leagues/verify-player", {
         team1,
         team2,
         player: input,
