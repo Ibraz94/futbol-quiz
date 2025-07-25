@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "../../lib/config";
 
 export default function TeamGamePage() {
   const [leagues, setLeagues] = useState<string[]>([]);
@@ -16,14 +17,14 @@ export default function TeamGamePage() {
       try {
         setLoading(true);
         setError(null);
-        const res = await axios.get("https://api.futbolquiz.staging.pegasync.com/leagues");
+        const res = await axios.get(`${API_BASE_URL}/leagues`);
         const leagueList = res.data.leagues || [];
         setLeagues(leagueList);
         // Fetch team counts for each league
         const counts: Record<string, number> = {};
         await Promise.all(
           leagueList.map(async (league: string) => {
-            const teamRes = await axios.get(`https://api.futbolquiz.staging.pegasync.com/leagues/${encodeURIComponent(league)}/teams`);
+            const teamRes = await axios.get(`${API_BASE_URL}/leagues/${encodeURIComponent(league)}/teams`);
             counts[league] = (teamRes.data.teams || []).length;
           })
         );

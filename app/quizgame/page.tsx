@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from "../../lib/config";
 
 type CareerEntry = {
   team: string;
@@ -28,7 +29,7 @@ const QuizGame: React.FC = () => {
 
   const fetchPlayers = async () => {
     try {
-      const res = await axios.get<Player[]>('https://api.futbolquiz.staging.pegasync.com/career/game');
+      const res = await axios.get<Player[]>(`${API_BASE_URL}/career/game`);
       setPlayers(res.data);
       setScore(0);
       setSeries(0);

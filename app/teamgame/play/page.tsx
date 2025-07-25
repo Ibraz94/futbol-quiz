@@ -6,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { API_BASE_URL } from "../../../lib/config";
 
 function PlayPageContent() {
   const searchParams = useSearchParams()!;
@@ -28,7 +29,7 @@ function PlayPageContent() {
   useEffect(() => {
     // Log all valid players for these teams for user help
     if (team1 && team2) {
-      axios.post("https://api.futbolquiz.staging.pegasync.com/leagues/valid-players", { team1, team2 })
+      axios.post(`${API_BASE_URL}/leagues/valid-players`, { team1, team2 })
         .then(res => {
           if (Array.isArray(res.data.players)) {
             console.log("Valid players for", team1, "&", team2, ":", res.data.players);
@@ -74,7 +75,7 @@ function PlayPageContent() {
     e.preventDefault();
     setSubmitted(true);
     try {
-      const res = await axios.post("https://api.futbolquiz.staging.pegasync.com/leagues/verify-player", {
+      const res = await axios.post(`${API_BASE_URL}/leagues/verify-player`, {
         team1,
         team2,
         player: input,

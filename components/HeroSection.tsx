@@ -134,6 +134,7 @@ const HeroSection = () => {
                         <Button variant="outline" className="w-[160px]" onClick={() => setIsModalOpen(true)}>START QUIZ GAME</Button>
                         <Button variant="outline" className="w-[160px] " onClick={() => router.push("/bingogame")}>START BINGO GAME</Button>
                         <Button variant="outline" className="w-[160px] " onClick={() => router.push("/teamgame")}>START CAREER GAME</Button>
+                        <Button variant="outline" className="w-[200px] " onClick={() => router.push("/tictactoe")}>START TICTACTOE GAME</Button>
                     </div>
                 </div>
             </motion.div>

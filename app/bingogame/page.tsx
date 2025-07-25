@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { API_BASE_URL } from "../../lib/config";
 
 type Category = {
   _id: string;
@@ -107,7 +108,7 @@ const BingoGame: React.FC = () => {
       try {
         setGridLoading(true);
 
-        const res = await axios.get<{ grid: Category[][] }>('https://api.futbolquiz.staging.pegasync.com/bingo/csv-grid');
+        const res = await axios.get<{ grid: Category[][] }>(`${API_BASE_URL}/bingo/csv-grid`);
         const gridFromApi = res.data.grid;
 
         setCurrentGrid(gridFromApi);
@@ -138,7 +139,7 @@ const BingoGame: React.FC = () => {
 
   const fetchMatchingPlayer = async (categories: string[], excludeIds: string[] = []) => {
     try {
-      const response = await axios.post('https://api.futbolquiz.staging.pegasync.com/bingo/find-player', {
+      const response = await axios.post(`${API_BASE_URL}/bingo/find-player`, {
         categories,
         excludeIds,
       });

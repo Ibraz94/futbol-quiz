@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Suspense } from "react";
+import { API_BASE_URL } from "../../../lib/config";
 
 function TeamsPageContent() {
   const router = useRouter();
@@ -13,7 +14,7 @@ function TeamsPageContent() {
   const [teams, setTeams] = useState<string[]>([]);
   const [randomTeams, setRandomTeams] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  // const [timer, setTimer] = useState(10);
+  const [timer, setTimer] = useState(10);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +28,7 @@ function TeamsPageContent() {
     }
     setLoading(true);
     axios
-      .get(`https://api.futbolquiz.staging.pegasync.com/leagues/${encodeURIComponent(league)}/teams`)
+      .get(`${API_BASE_URL}/leagues/${encodeURIComponent(league)}/teams`)
       .then((res) => {
         const allTeams = res.data.teams || [];
         // Shuffle and pick 10 teams
@@ -47,18 +48,18 @@ function TeamsPageContent() {
     }
   }, [selected, router, league, correctCount]);
 
-  // useEffect(() => {
-  //   if (timer === 0 && selected.length < 2) {
-  //     // Redirect to league selection page if time is up and not enough teams selected
-  //     router.push('/teamgame');
-  //     return;
-  //   }
-  //   if (selected.length === 2) return;
-  //   if (timer > 0) {
-  //     const t = setTimeout(() => setTimer(timer - 1), 1000);
-  //     return () => clearTimeout(t);
-  //   }
-  // }, [timer, selected, teams, router]);
+  useEffect(() => {
+    if (timer === 0 && selected.length < 2) {
+      // Redirect to league selection page if time is up and not enough teams selected
+      router.push('/teamgame');
+      return;
+    }
+    if (selected.length === 2) return;
+    if (timer > 0) {
+      const t = setTimeout(() => setTimer(timer - 1), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [timer, selected, teams, router]);
 
   const handleSelect = (team: string) => {
     if (selected.includes(team) || selected.length === 2) return;
@@ -70,7 +71,7 @@ function TeamsPageContent() {
       <div className="w-full max-w-md p-6 rounded-2xl bg-[#23233a] border border-white/10 text-white shadow-lg mt-5">
         <div className="flex justify-between items-center mb-4">
           <div className="font-bold text-lg text-white/80">Team</div>
-          {/* <div className="text-2xl font-bold text-white/90">TIMER : {timer}'</div> */}
+          <div className="text-2xl font-bold text-white/90">TIMER : {timer}'</div>
         </div>
         {loading && <div className="text-center py-6 text-white/60">Loading teams...</div>}
         {error && <div className="text-center py-6 text-red-400">{error}</div>}

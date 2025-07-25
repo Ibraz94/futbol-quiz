@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FaUser, FaEnvelope, FaLock } from "react-icons/fa";
+import { API_BASE_URL } from "../../lib/config";
 
 const Register: React.FC = () => {
     const router = useRouter();
@@ -26,7 +27,7 @@ const Register: React.FC = () => {
         e.preventDefault();
 
         try {
-            const res = await fetch("https://api.futbolquiz.staging.pegasync.com/users", {
+            const res = await fetch(`${API_BASE_URL}/users`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

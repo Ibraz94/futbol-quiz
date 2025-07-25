@@ -47,6 +47,7 @@ const MobileHeroSection = () => {
                             <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => setIsModalOpen(true)}>START QUIZ GAME</Button>
                             <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/bingogame")}>START BINGO GAME</Button>
                             <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/teamgame")}>START CAREER GAME</Button>
+                            <Button variant="outline" className="w-28 hover:bg-accent text-xs" onClick={() => router.push("/tictactoe")}>START TICTACTOE GAME</Button>
                         </div>
                     </div>
                 </div>

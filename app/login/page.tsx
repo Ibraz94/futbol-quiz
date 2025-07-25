@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "../../lib/config";
 
 const Login: React.FC = () => {
   const router = useRouter();
@@ -14,7 +15,7 @@ const Login: React.FC = () => {
     setError(null);
 
     try {
-      const res = await fetch("https://api.futbolquiz.staging.pegasync.com/auth/user/login", {
+      const res = await fetch(`${API_BASE_URL}/auth/user/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
