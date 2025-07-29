@@ -29,6 +29,8 @@
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
   const [turnTimer, setTurnTimer] = useState(20);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [dataReady, setDataReady] = useState(false);
+  const [pendingWin, setPendingWin] = useState<null | 'Player 1' | 'Player 2'>(null);
 
       // 3x3 grid state: { locked, image, answer }
       type CellState = { locked: boolean; image: 'X' | 'O' | null; answer: string | null };
@@ -39,12 +41,17 @@
       const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
 
       useEffect(() => {
+        let gridLoaded = false;
+        let playersLoaded = false;
+
         axios.get(`${API_BASE_URL}/tictactoe/categories/grid`)
           .then(res => {
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
             setPairs(res.data.pairs);
             setLoading(false);
+            gridLoaded = true;
+            if (playersLoaded) setDataReady(true);
           })
           .catch(err => {
             setError("Failed to load grid categories");
@@ -54,9 +61,13 @@
         axios.get(`${API_BASE_URL}/tictactoe/players`)
           .then(res => {
             setAllPlayers(res.data.players);
+            playersLoaded = true;
+            if (gridLoaded) setDataReady(true);
           })
           .catch(() => {
             setAllPlayers([]);
+            playersLoaded = true;
+            if (gridLoaded) setDataReady(true);
           });
       }, []);
 
@@ -73,15 +84,15 @@
         setPlayersLoading(false);
       }, [modalOpen, search, allPlayers]);
 
-      // Timer effect: start/reset on turn change
+      // Timer effect: start/reset on turn change, but only if dataReady
       useEffect(() => {
+        if (!dataReady) return; // Don't start timer until data is ready
         setTurnTimer(20);
         if (timerRef.current) clearInterval(timerRef.current);
         timerRef.current = setInterval(() => {
           setTurnTimer(prev => {
             if (prev === 1) {
               clearInterval(timerRef.current!);
-              // Auto-skip turn if timer runs out
               setShowSkipConfirmation(false); // close skip modal if open
               setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
               setModalOpen(false);
@@ -96,7 +107,7 @@
         return () => {
           if (timerRef.current) clearInterval(timerRef.current);
         };
-      }, [currentTurn, winner, draw]);
+      }, [currentTurn, winner, draw, dataReady]);
 
       if (loading) {
         return <div className="min-h-screen flex items-center justify-center text-white">Loading categories...</div>;
@@ -186,16 +197,21 @@
             };
             // Check for win after updating the cell
             if (checkWin(newStates, currentTurn)) {
-              setWinner(currentTurn === 'X' ? 'Player 1' : 'Player 2');
-              if (currentTurn === 'X') {
-                setPlayer1Wins(w => w + 1);
-              } else {
-                setPlayer2Wins(w => w + 1);
-              }
+              const winnerName = currentTurn === 'X' ? 'Player 1' : 'Player 2';
+              setPendingWin(winnerName);
               setTimeout(() => {
-                setWinner(null);
-                resetBoard();
-              }, 2000);
+                setWinner(winnerName);
+                if (currentTurn === 'X') {
+                  setPlayer1Wins(w => w + 1);
+                } else {
+                  setPlayer2Wins(w => w + 1);
+                }
+                setPendingWin(null);
+                setTimeout(() => {
+                  setWinner(null);
+                  resetBoard();
+                }, 2000); // Winner modal duration
+              }, 5000); // Show grid for 5 seconds before modal
             } else if (checkDraw(newStates)) {
               setDraw(true);
               setTimeout(() => {
@@ -400,7 +416,7 @@
           )}
 
           {/* Winner Modal */}
-          {winner && (
+          {winner && !pendingWin && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
               <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative flex flex-col items-center">
                 <h2 className="text-3xl font-bold mb-4">{winner} Wins!</h2>
