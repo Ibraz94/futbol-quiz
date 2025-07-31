@@ -4,6 +4,7 @@
     import axios from "axios";
     import Image from "next/image";
     import { API_BASE_URL } from "../../lib/config";
+    import { useRouter } from "next/navigation";
 
     export default function TictactoePage() {
       const [topCategories, setTopCategories] = useState<string[]>([]);
@@ -31,6 +32,7 @@
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [dataReady, setDataReady] = useState(false);
   const [pendingWin, setPendingWin] = useState<null | 'Player 1' | 'Player 2'>(null);
+  const router = useRouter();
 
       // 3x3 grid state: { locked, image, answer }
       type CellState = { locked: boolean; image: 'X' | 'O' | null; answer: string | null };
@@ -202,15 +204,33 @@
               setTimeout(() => {
                 setWinner(winnerName);
                 if (currentTurn === 'X') {
-                  setPlayer1Wins(w => w + 1);
+                  setPlayer1Wins(prev => {
+                const updated = prev + 1;
+                if (updated === 3) {
+                  setTimeout(() => router.push('/'), 2000); // Redirect to homepage after showing modal
                 } else {
-                  setPlayer2Wins(w => w + 1);
+                  setTimeout(() => {
+                    setWinner(null);
+                    resetBoard();
+                  }, 2000);
                 }
-                setPendingWin(null);
+                return updated;
+              });
+            } else {
+              setPlayer2Wins(prev => {
+                const updated = prev + 1;
+                if (updated === 3) {
+                setTimeout(() => router.push('/'), 2000);
+                  } else {
                 setTimeout(() => {
                   setWinner(null);
                   resetBoard();
                 }, 2000); // Winner modal duration
+                }
+                return updated;
+              });
+            }
+            setPendingWin(null);
               }, 5000); // Show grid for 5 seconds before modal
             } else if (checkDraw(newStates)) {
               setDraw(true);
