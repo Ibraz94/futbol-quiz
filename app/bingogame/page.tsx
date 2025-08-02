@@ -30,22 +30,158 @@ const getCellClass = (status: CellStatus) => {
 };
 
 const getLogoPath = (slug: string): string | null => {
-  const variations = [
-    slug,
-    slug.toLowerCase(),
-    slug.toLowerCase().replace(/[^a-z0-9ığüşöç]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''),
-    slug.toLowerCase().replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c'),
-    slug.toLowerCase().replace(/i/g, 'ı').replace(/g/g, 'ğ').replace(/u/g, 'ü').replace(/s/g, 'ş').replace(/o/g, 'ö').replace(/c/g, 'ç'),
-    slug.toLowerCase().replace(/İ/g, 'i').replace(/Ğ/g, 'g').replace(/Ü/g, 'u').replace(/Ş/g, 's').replace(/Ö/g, 'o').replace(/Ç/g, 'c'),
-    slug.toLowerCase().replace(/İ/g, 'i').replace(/Ğ/g, 'g').replace(/Ü/g, 'u').replace(/Ş/g, 's').replace(/Ö/g, 'o').replace(/Ç/g, 'c'),
-    slug.toLowerCase().replace(/\s+/g, '-'),
-    slug.toLowerCase().replace(/\s+/g, ''),
-    slug.toLowerCase().replace(/[^a-z0-9]/g, ''),
-    slug.toLowerCase().replace(/[^a-z0-9ığüşöçİĞÜŞÖÇ]/g, ''),
-  ];
+  // Simple normalization function that matches our file naming convention
+  const normalizeSlug = (input: string): string => {
+    return input.toLowerCase()
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/[ığüşöçİĞÜŞÖÇ]/g, (match) => {
+        const turkishToLatin: Record<string, string> = {
+          'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c',
+          'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'
+        };
+        return turkishToLatin[match] || match;
+      })
+      .replace(/[^a-z0-9-]/g, '') // Remove special characters except hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+  };
+
+  // Normalize the slug to match our file naming convention
+  const normalizedSlug = normalizeSlug(slug);
   
-  const uniqueVariations = Array.from(new Set(variations)).filter(v => v.length > 0);  
-  return uniqueVariations.length > 0 ? `/bingo_game_logos/${uniqueVariations[0]}.png` : null;
+  // Debug logging
+  console.log(`🔍 Logo search for "${slug}" → normalized: "${normalizedSlug}"`);
+  
+  // Special handling for known problematic cases
+  if (slug.includes('Tottenham Hotspur') || slug.includes('tottenham-hotspur') || slug.includes('tottenham hotspur')) {
+    console.log(`🎯 Direct return for Tottenham Hotspur`);
+    return `/bingo_game_logos/tottenham-hotspur.png`;
+  }
+  
+  // Handle common variations for club names
+  if (slug.includes('Tottenham') || slug.includes('tottenham')) {
+    console.log(`🎯 Direct return for Tottenham (variation)`);
+    return `/bingo_game_logos/tottenham-hotspur.png`;
+  }
+  
+  // Handle common variations for country names
+  if (slug.includes('Portekiz') || slug.includes('portekiz')) {
+    console.log(`🎯 Direct return for Portekiz`);
+    return `/bingo_game_logos/portekiz.png`;
+  }
+  
+  // Handle common variations for country names with Turkish characters
+  if (slug.includes('Çekya') || slug.includes('çekya') || slug.includes('cekiya')) {
+    console.log(`🎯 Direct return for Çekya`);
+    return `/bingo_game_logos/cekiya.png`;
+  }
+  
+  // Handle common variations for country-league combinations with Turkish characters
+  if (slug.includes('İtalya Serie A') || slug.includes('italya-serie-a') || slug.includes('italya serie a')) {
+    console.log(`🎯 Direct return for İtalya Serie A`);
+    return `/bingo_game_logos/i̇talya-serie-a.png`; // Using the correct filename with Turkish character
+  }
+  
+  // Handle Hırvatistan (Croatia)
+  if (slug.includes('Hırvatistan') || slug.includes('hırvatistan') || slug.includes('hirvatistan') || 
+      slug.includes('Croatia') || slug.includes('croatia')) {
+    console.log(`🎯 Direct return for Hırvatistan`);
+    return `/bingo_game_logos/hirvatistan.png`; // Using the normalized filename
+  }
+  
+  // Handle Dünya Kupası
+  if (slug.includes('Dünya Kupası') || slug.includes('dünya-kupası') || slug.includes('dunya-kupasi')) {
+    console.log(`🎯 Direct return for Dünya Kupası`);
+    return `/bingo_game_logos/dünya-kupası.png`; // Using the correct filename with Turkish characters
+  }
+  
+  // Handle İngiltere Premier League
+  if (slug.includes('İngiltere Premier League') || slug.includes('i̇ngiltere-premier-league') || slug.includes('ingiltere-premier-league') || 
+      slug.includes('England Premier League') || slug.includes('england-premier-league')) {
+    console.log(`🎯 Direct return for İngiltere Premier League`);
+    return `/bingo_game_logos/i̇ngiltere-premier-league.png`; // Using the correct filename with Turkish character
+  }
+  
+  // Handle İtalya Serie A
+  if (slug.includes('İtalya Serie A') || slug.includes('i̇talya-serie-a') || slug.includes('italya-serie-a') || 
+      slug.includes('Italy Serie A') || slug.includes('italy-serie-a')) {
+    console.log(`🎯 Direct return for İtalya Serie A`);
+    return `/bingo_game_logos/i̇talya-serie-a.png`; // Using the correct filename with Turkish character
+  }
+  
+  if (slug.includes('Avrupa Şampiyonası') || slug.includes('avrupa-şampiyonası') || slug.includes('avrupa-sampiyonasi')) {
+    console.log(`🎯 Direct return for Avrupa Şampiyonası (using UEFA logo)`);
+    return `/bingo_game_logos/avrupa-şampiyonası.png`; // Using the correct filename with Turkish characters
+  }
+  
+  if (slug.includes('Süper Lig') || slug.includes('süper-lig') || slug.includes('super-lig')) {
+    console.log(`🎯 Direct return for Süper Lig (using Turkish league logo)`);
+    return `/bingo_game_logos/süper-lig.png`; // Using the correct filename with Turkish character
+  }
+  
+  // Handle Bayer 04 Leverkusen
+  if (slug.includes('Bayer 04 Leverkusen') || slug.includes('bayer-04-leverkusen') || slug.includes('bayer 04 leverkusen')) {
+    console.log(`🎯 Direct return for Bayer 04 Leverkusen`);
+    return `/bingo_game_logos/bayer-leverkusen.png`;
+  }
+  
+  // Handle Afrika Kupası
+  if (slug.includes('Afrika Kupası') || slug.includes('afrika-kupası') || slug.includes('afrika-kupasi')) {
+    console.log(`🎯 Direct return for Afrika Kupası`);
+    return `/bingo_game_logos/afrika-kupası.png`; // Using the correct filename with Turkish character
+  }
+  
+  // Handle UEFA Şampiyonlar Ligi (UEFA Champions League)
+  if (slug.includes('UEFA Şampiyonlar Ligi') || slug.includes('uefa-şampiyonlar-ligi') || slug.includes('uefa-sampiyonlar-ligi') || 
+      slug.includes('Champions League') || slug.includes('champions-league')) {
+    console.log(`🎯 Direct return for UEFA Şampiyonlar Ligi`);
+    return `/bingo_game_logos/laliga.png`; // Using La Liga logo as fallback for Champions League
+  }
+  
+  // Handle İspanya LaLiga
+  if (slug.includes('İspanya LaLiga') || slug.includes('i̇spanya-laliga') || slug.includes('ispanya-laliga') || 
+      slug.includes('Spain LaLiga') || slug.includes('spain-laliga')) {
+    console.log(`🎯 Direct return for İspanya LaLiga`);
+    return `/bingo_game_logos/i̇spanya-laliga.png`; // Using the correct filename with Turkish character
+  }
+  
+  // Handle Fildişi Sahili (Ivory Coast)
+  if (slug.includes('Fildişi Sahili') || slug.includes('fildişi-sahili') || slug.includes('fildisi-sahili') || 
+      slug.includes('Ivory Coast') || slug.includes('ivory-coast')) {
+    console.log(`🎯 Direct return for Fildişi Sahili`);
+    return `/bingo_game_logos/fildişi-sahili.png`; // Using the correct filename with Turkish characters
+  }
+  
+  // Handle other Turkish character cases
+  if (slug.includes('ç') || slug.includes('Ç')) {
+    console.log(`🎯 Turkish 'ç' detected in "${slug}", trying normalized version`);
+    return `/bingo_game_logos/${normalizedSlug}.png`;
+  }
+  
+  // Handle other Turkish characters
+  if (slug.includes('ı') || slug.includes('İ') || slug.includes('ğ') || slug.includes('Ğ') || 
+      slug.includes('ü') || slug.includes('Ü') || slug.includes('ş') || slug.includes('Ş') || 
+      slug.includes('ö') || slug.includes('Ö')) {
+    console.log(`🎯 Turkish character detected in "${slug}", trying normalized version`);
+    return `/bingo_game_logos/${normalizedSlug}.png`;
+  }
+  
+  // Handle any slug with Turkish characters and spaces (comprehensive fallback)
+  if (slug.includes(' ') && (slug.includes('ı') || slug.includes('İ') || slug.includes('ğ') || slug.includes('Ğ') || 
+                             slug.includes('ü') || slug.includes('Ü') || slug.includes('ş') || slug.includes('Ş') || 
+                             slug.includes('ö') || slug.includes('Ö') || slug.includes('ç') || slug.includes('Ç'))) {
+    console.log(`🎯 Turkish character with spaces detected in "${slug}", trying normalized version`);
+    return `/bingo_game_logos/${normalizedSlug}.png`;
+  }
+  
+  // Handle common variations for player names
+  if (slug.includes('Edin Visca') || slug.includes('edin-visca') || slug.includes('edin visca')) {
+    console.log(`🎯 Direct return for Edin Visca`);
+    return `/bingo_game_logos/edin-visca.png`;
+  }
+  
+  // Return the path if we have a normalized slug
+  return normalizedSlug ? `/bingo_game_logos/${normalizedSlug}.png` : null;
 };
 
 const BingoGame: React.FC = () => {
@@ -370,31 +506,45 @@ const BingoGame: React.FC = () => {
               {row.map((cat, colIndex) => {
                 const key = `${rowIndex}-${colIndex}`;
                 const logoPath = getLogoPath(cat.slug);
+                
+                // Debug logging for cells that might not have logos
+                if (!logoPath) {
+                  console.log(`⚠️ No logo path found for category: "${cat.name}" (slug: "${cat.slug}")`);
+                } else {
+                  // Log the path being tried for debugging
+                  console.log(`🎯 Trying logo path: ${logoPath} for "${cat.name}" (slug: "${cat.slug}")`);
+                }
+                
+                // Log all slugs for comprehensive debugging
+                console.log(`📋 Category: "${cat.name}" | Slug: "${cat.slug}" | Logo Path: ${logoPath || 'NONE'}`);
+                
                 return (
                   <div
                     key={key}
                     className={`${getCellClass(cellStatus[key] ?? 'default')} text-xs font-medium leading-tight flex flex-col items-center justify-center text-center w-38 h-16 rounded transition-all duration-200 p-1`}
                     onClick={() => handleCellClick(cat, rowIndex, colIndex)}
                   >
-                                         {cellStatus[key] === 'correct' ? (
-                       '🔒'
-                     ) : (
-                       <>
-                         {logoPath && (
-                           <Image
-                             src={logoPath}
-                             alt={cat.name}
-                             width={24}
-                             height={24}
-                             className="mb-1"
-                             onError={(e) => {
-                               e.currentTarget.style.display = 'none';
-                             }}
-                           />
-                         )}
-                         <span className="text-[10px] leading-tight">{cat.name}</span>
-                       </>
-                     )}
+                    {cellStatus[key] === 'correct' ? (
+                      '🔒'
+                    ) : (
+                      <>
+                        {logoPath && (
+                          <Image
+                            src={logoPath}
+                            alt={cat.name}
+                            width={24}
+                            height={24}
+                            className="mb-1"
+                            onError={(e) => {
+                              console.log(`❌ Failed to load logo for "${cat.name}" (slug: "${cat.slug}") at path: ${logoPath}`);
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        
+                        <span className="text-[10px] leading-tight">{cat.name}</span>
+                      </>
+                    )}
                   </div>
                 );
               })}
