@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from "../../lib/config";
+import Image from 'next/image';
 
 type Category = {
   _id: string;
@@ -26,6 +27,25 @@ const getCellClass = (status: CellStatus) => {
     case 'wrong': return 'bg-red-500 text-white';
     default: return 'bg-[#23243a] text-white/90 hover:ring-2 hover:ring-[#ffd60066] cursor-pointer';
   }
+};
+
+const getLogoPath = (slug: string): string | null => {
+  const variations = [
+    slug,
+    slug.toLowerCase(),
+    slug.toLowerCase().replace(/[^a-z0-9ığüşöç]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''),
+    slug.toLowerCase().replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c'),
+    slug.toLowerCase().replace(/i/g, 'ı').replace(/g/g, 'ğ').replace(/u/g, 'ü').replace(/s/g, 'ş').replace(/o/g, 'ö').replace(/c/g, 'ç'),
+    slug.toLowerCase().replace(/İ/g, 'i').replace(/Ğ/g, 'g').replace(/Ü/g, 'u').replace(/Ş/g, 's').replace(/Ö/g, 'o').replace(/Ç/g, 'c'),
+    slug.toLowerCase().replace(/İ/g, 'i').replace(/Ğ/g, 'g').replace(/Ü/g, 'u').replace(/Ş/g, 's').replace(/Ö/g, 'o').replace(/Ç/g, 'c'),
+    slug.toLowerCase().replace(/\s+/g, '-'),
+    slug.toLowerCase().replace(/\s+/g, ''),
+    slug.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    slug.toLowerCase().replace(/[^a-z0-9ığüşöçİĞÜŞÖÇ]/g, ''),
+  ];
+  
+  const uniqueVariations = Array.from(new Set(variations)).filter(v => v.length > 0);  
+  return uniqueVariations.length > 0 ? `/bingo_game_logos/${uniqueVariations[0]}.png` : null;
 };
 
 const BingoGame: React.FC = () => {
@@ -349,13 +369,32 @@ const BingoGame: React.FC = () => {
             <div key={rowIndex} className="grid grid-cols-4 gap-2">
               {row.map((cat, colIndex) => {
                 const key = `${rowIndex}-${colIndex}`;
+                const logoPath = getLogoPath(cat.slug);
                 return (
                   <div
                     key={key}
-                    className={`${getCellClass(cellStatus[key] ?? 'default')} text-xs font-medium leading-tight flex items-center justify-center text-center w-38 h-16 rounded transition-all duration-200`}
+                    className={`${getCellClass(cellStatus[key] ?? 'default')} text-xs font-medium leading-tight flex flex-col items-center justify-center text-center w-38 h-16 rounded transition-all duration-200 p-1`}
                     onClick={() => handleCellClick(cat, rowIndex, colIndex)}
                   >
-                    {cellStatus[key] === 'correct' ? '🔒' : cat.name}
+                                         {cellStatus[key] === 'correct' ? (
+                       '🔒'
+                     ) : (
+                       <>
+                         {logoPath && (
+                           <Image
+                             src={logoPath}
+                             alt={cat.name}
+                             width={24}
+                             height={24}
+                             className="mb-1"
+                             onError={(e) => {
+                               e.currentTarget.style.display = 'none';
+                             }}
+                           />
+                         )}
+                         <span className="text-[10px] leading-tight">{cat.name}</span>
+                       </>
+                     )}
                   </div>
                 );
               })}
