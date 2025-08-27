@@ -1,31 +1,30 @@
     "use client";
 
-    import { useEffect, useState, useRef } from "react";
+    import { useEffect, useState, useRef, Suspense } from "react";
     import axios from "axios";
     import Image from "next/image";
     import { API_BASE_URL } from "../../lib/config";
-    import { useRouter } from "next/navigation";
+    import { useRouter, useSearchParams } from "next/navigation";
 
-    export default function TictactoePage() {
-      const [topCategories, setTopCategories] = useState<string[]>([]);
-      const [leftCategories, setLeftCategories] = useState<string[]>([]);
-      const [pairs, setPairs] = useState<{ categories: string[]; players: string[] }[]>([]);
-      const [loading, setLoading] = useState(true);
-      const [error, setError] = useState<string | null>(null);
-      const [modalOpen, setModalOpen] = useState(false);
-      const [search, setSearch] = useState("");
-      const [players, setPlayers] = useState<any[]>([]);
-      const [playersLoading, setPlayersLoading] = useState(false);
-      const [playersError, setPlayersError] = useState<string | null>(null);
-      const [activePair, setActivePair] = useState<string[] | null>(null);
-      const [allPlayers, setAllPlayers] = useState<any[]>([]);
-      const [player1Score, setPlayer1Score] = useState(0);
-      const [player2Score, setPlayer2Score] = useState(0);
-      const [player1Wins, setPlayer1Wins] = useState(0);
-      const [player2Wins, setPlayer2Wins] = useState(0);
-      const [winner, setWinner] = useState<string | null>(null);
-      const [draw, setDraw] = useState(false);
-        const [drawRequested, setDrawRequested] = useState<string | null>(null); // 'X' or 'O' who requested draw
+    function TictactoeGame() {
+  const [topCategories, setTopCategories] = useState<{ name: string; slug: string; categoryId: number }[]>([]);
+  const [leftCategories, setLeftCategories] = useState<{ name: string; slug: string; categoryId: number }[]>([]);
+  const [pairs, setPairs] = useState<{ categories: string[]; players: string[] }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [players, setPlayers] = useState<any[]>([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
+  const [playersError, setPlayersError] = useState<string | null>(null);
+  const [activePair, setActivePair] = useState<string[] | null>(null);
+  const [player1Score, setPlayer1Score] = useState(0);
+  const [player2Score, setPlayer2Score] = useState(0);
+  const [player1Wins, setPlayer1Wins] = useState(0);
+  const [player2Wins, setPlayer2Wins] = useState(0);
+  const [winner, setWinner] = useState<string | null>(null);
+  const [draw, setDraw] = useState(false);
+    const [drawRequested, setDrawRequested] = useState<string | null>(null); // 'X' or 'O' who requested draw
   const [showDrawConfirmation, setShowDrawConfirmation] = useState(false);
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
   const [turnTimer, setTurnTimer] = useState(20);
@@ -33,6 +32,8 @@
   const [dataReady, setDataReady] = useState(false);
   const [pendingWin, setPendingWin] = useState<null | 'Player 1' | 'Player 2'>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const league = searchParams?.get('league') || 'bundesliga'; // Default to bundesliga if no league specified
 
       // 3x3 grid state: { locked, image, answer }
       type CellState = { locked: boolean; image: 'X' | 'O' | null; answer: string | null };
@@ -46,7 +47,8 @@
         let gridLoaded = false;
         let playersLoaded = false;
 
-        axios.get(`${API_BASE_URL}/tictactoe/categories/grid`)
+        console.log(`🎯 Loading TicTacToe grid for league: ${league}`);
+        axios.get(`${API_BASE_URL}/tictactoe/categories/grid?league=${league}`)
           .then(res => {
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
@@ -59,32 +61,35 @@
             setError("Failed to load grid categories");
             setLoading(false);
           });
-        // Fetch all players once on mount
-        axios.get(`${API_BASE_URL}/tictactoe/players`)
-          .then(res => {
-            setAllPlayers(res.data.players);
-            playersLoaded = true;
-            if (gridLoaded) setDataReady(true);
-          })
-          .catch(() => {
-            setAllPlayers([]);
-            playersLoaded = true;
-            if (gridLoaded) setDataReady(true);
-          });
+        // No need to fetch players separately - grid contains all valid player-category pairs
+        playersLoaded = true;
+        if (gridLoaded) setDataReady(true);
       }, []);
 
       // Filter players for the modal when modal is open, activePair or search changes
       useEffect(() => {
-        if (!modalOpen) return;
+        if (!modalOpen || !activePair) return;
         setPlayersLoading(true);
         setPlayersError(null);
-        // Filter allPlayers by search only
-        const filtered = allPlayers.filter(p =>
-          !search || p["Player Name"].toLowerCase().includes(search.toLowerCase())
+        
+        // Find the valid players for this cell from the grid data
+        const pair = findPair(
+          { name: activePair[0], slug: '', categoryId: 0 }, 
+          { name: activePair[1], slug: '', categoryId: 0 }
         );
-        setPlayers(filtered);
+        
+        if (pair) {
+          // Filter the valid players by search term
+          const filtered = pair.players.filter(playerName =>
+            !search || playerName.toLowerCase().includes(search.toLowerCase())
+          );
+          setPlayers(filtered.map(playerName => ({ playerName })));
+        } else {
+          setPlayers([]);
+        }
+        
         setPlayersLoading(false);
-      }, [modalOpen, search, allPlayers]);
+      }, [modalOpen, search, activePair, pairs]);
 
       // Timer effect: start/reset on turn change, but only if dataReady
       useEffect(() => {
@@ -119,11 +124,32 @@
       }
 
       // Helper to find the pair object for a given cell
-      function findPair(cat1: string, cat2: string) {
+      function findPair(cat1: { name: string; slug: string; categoryId: number }, cat2: { name: string; slug: string; categoryId: number }) {
         return pairs.find(
-          p => (p.categories[0] === cat1 && p.categories[1] === cat2) ||
-               (p.categories[1] === cat1 && p.categories[0] === cat2)
+          p => (p.categories[0] === cat1.name && p.categories[1] === cat2.name) ||
+               (p.categories[1] === cat1.name && p.categories[0] === cat2.name)
         );
+      }
+
+      // Helper to get category icon path based on categoryId and league
+      function getCategoryIconPath(categoryId: number): string {
+        // Base path for tictactoe images
+        const basePath = '/tictactoeimg';
+        
+        // Determine which league folder to use based on current league
+        let leagueFolder = 'bundesligaicons'; // Default
+        
+        if (league === 'superlig') {
+          leagueFolder = 'slicons';
+        } else if (league === 'laliga') {
+          leagueFolder = 'laligaicons';
+        } else if (league === 'premier-lig') {
+          leagueFolder = 'plicons';
+        } else if (league === 'serie-a') {
+          leagueFolder = 'serieaicons';
+        }
+        // Return the image path using the categoryId directly
+        return `${basePath}/${leagueFolder}/${categoryId}.png`;
       }
 
       // Helper: check for win
@@ -152,10 +178,10 @@
         if (cellStates[row][col].locked) return;
         const pair = findPair(topCategories[col], leftCategories[row]);
         if (pair) {
-          console.log('Valid answers for', topCategories[col], '+', leftCategories[row], ':', pair.players);
+          console.log('Valid answers for', topCategories[col].name, '+', leftCategories[row].name, ':', pair.players);
         }
         setModalOpen(true);
-        setActivePair([topCategories[col], leftCategories[row]]);
+        setActivePair([topCategories[col].name, leftCategories[row].name]);
         setActiveCell({ row, col });
       }
 
@@ -170,7 +196,8 @@
         setActivePair(null);
         setActiveCell(null);
         setLoading(true);
-        axios.get(`${API_BASE_URL}/tictactoe/categories/grid`)
+        console.log(`🔄 Resetting board and loading new grid for league: ${league}`);
+        axios.get(`${API_BASE_URL}/tictactoe/categories/grid?league=${league}`)
           .then(res => {
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
@@ -187,7 +214,10 @@
       function handlePlayerSelect(playerName: string) {
         if (!activePair || !activeCell) return;
         // Find valid answers for this cell
-        const pair = findPair(activePair[0], activePair[1]);
+        const pair = findPair(
+          { name: activePair[0], slug: '', categoryId: 0 }, 
+          { name: activePair[1], slug: '', categoryId: 0 }
+        );
         if (pair && pair.players.includes(playerName)) {
           // Correct answer: lock cell, set image, set answer, alternate turn, increment score
           setCellStates(prev => {
@@ -329,21 +359,61 @@
               </button>
             </div>
           </div>
-          <div className="w-full max-w-4xl rounded-lg shadow-lg overflow-hidden bg-[#23233a] p-4">
+          <div className="w-full max-w-5xl rounded-lg shadow-lg overflow-hidden bg-[#23233a] p-4">
             {/* Top row: categories (top headers) */}
-            <div className="flex mb-2" style={{ height: 50 }}>
-              <div className="w-[180px]" /> {/* Empty for alignment */}
+            <div className="flex mb-2" style={{ height: 120 }}>
+              <div className="w-[180px] flex flex-col items-center justify-center">
+                {/* KI-TAKA-TOE Logo in top-left corner */}
+                <Image
+                  src="/tictactoeimg/kitakatloe-logo.png"
+                  alt="KI-TAKA-TOE"
+                  width={64}
+                  height={64}
+                  className="mb-3"
+                  style={{ objectFit: 'contain' }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <span className="text-sm text-white text-center font-semibold">KI-TAKA-TOE</span>
+              </div>
               {topCategories.map((cat, i) => (
-                <div key={i} className="flex-1 flex items-center justify-center text-lg font-bold tracking-wide h-full">
-                  <span className="flex items-center justify-center w-full h-full">{cat}</span>
+                <div key={i} className="flex-1 flex flex-col items-center justify-center h-full px-1">
+                  <span className="text-center w-full break-words leading-tight text-sm font-bold mb-2" style={{ lineHeight: '1.2' }}>
+                    {cat.name}
+                  </span>
+                  <Image
+                    src={getCategoryIconPath(cat.categoryId)}
+                    alt={cat.name}
+                    width={56}
+                    height={56}
+                    className="mb-2"
+                    style={{ objectFit: 'contain' }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 </div>
               ))}
             </div>
             {/* 3 rows: each with left category and 3 grid boxes */}
             {leftCategories.map((leftCat, row) => (
-              <div key={row} className="flex items-center" style={{ minHeight: 80 }}>
-                <div className="w-[180px] flex items-center justify-center">
-                  <span className="text-base font-bold text-center w-full whitespace-nowrap">{leftCat}</span>
+              <div key={row} className="flex items-center" style={{ minHeight: 120 }}>
+                <div className="w-[180px] flex flex-col items-center justify-center px-2">
+                  <span className="text-sm font-bold text-center w-full break-words leading-tight mb-2" style={{ lineHeight: '1.2' }}>
+                    {leftCat.name}
+                  </span>
+                  <Image
+                    src={getCategoryIconPath(leftCat.categoryId)}
+                    alt={leftCat.name}
+                    width={56}
+                    height={56}
+                    className="mb-2"
+                    style={{ objectFit: 'contain' }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 </div>
                 {topCategories.map((topCat, col) => {
                   const pair = findPair(topCat, leftCat);
@@ -351,7 +421,7 @@
                   return (
                     <div
                       key={col}
-                      className={`flex-1 flex flex-col items-center justify-center border-2 border-[#2e2e4d] rounded-none min-h-[60px] max-h-[80px] aspect-square transition text-base font-bold ${cell.locked ? 'bg-green-500 cursor-not-allowed' : 'bg-green-600 cursor-pointer hover:bg-green-700'}`}
+                      className={`flex-1 flex flex-col items-center justify-center border-2 border-[#2e2e4d] rounded-none min-h-[80px] max-h-[100px] aspect-square transition text-base font-bold ${cell.locked ? 'bg-green-500 cursor-not-allowed' : 'bg-green-600 cursor-pointer hover:bg-green-700'}`}
                       onClick={() => handleCellClick(row, col)}
                     >
                       {cell.locked ? (
@@ -363,7 +433,9 @@
                             height={48}
                             className="mb-1"
                           />
-                          <span className="text-xs text-green-200 mt-1">{cell.answer}</span>
+                          <span className="text-xs text-green-200 mt-1 text-center break-words px-1" style={{ maxWidth: '100%', lineHeight: '1.1' }}>
+                            {cell.answer}
+                          </span>
                         </>
                       ) : (
                         <>
@@ -409,10 +481,9 @@
                       <div
                         key={i}
                         className="flex flex-col gap-1 py-1 px-2 hover:bg-gray-200 rounded cursor-pointer"
-                        onClick={() => handlePlayerSelect(p["Player Name"])}
+                        onClick={() => p.playerName && handlePlayerSelect(p.playerName)}
                       >
-                        <span className="font-bold">{p["Player Name"]}</span>
-                        <span className="text-xs text-gray-600">{p["Category Name"]}</span>
+                        <span className="font-bold">{p.playerName || 'Unknown Player'}</span>
                       </div>
                     ))
                   )}
@@ -503,5 +574,14 @@
         </div>
       )}
         </div>
+      );
+    }
+
+    // Main page component with Suspense wrapper
+    export default function TictactoePage() {
+      return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Loading...</div>}>
+          <TictactoeGame />
+        </Suspense>
       );
     } 
