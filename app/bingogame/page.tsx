@@ -618,7 +618,7 @@ const BingoGame: React.FC = () => {
                       '🔒'
                     ) : (
                       <>
-                        {logoPath && failedImageAttempts[logoPath] < 2 ? (
+                        {logoPath && (!failedImageAttempts[logoPath] || failedImageAttempts[logoPath] < 2) ? (
                           <Image
                             src={logoPath}
                             alt={cat.name}
