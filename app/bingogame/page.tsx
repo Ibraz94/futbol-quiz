@@ -5,26 +5,66 @@ import axios from 'axios';
 import { API_BASE_URL } from "../../lib/config";
 import Image from 'next/image';
 
-type Category = {
-  _id: string;
-  name: string;
-  type: string;
-  slug: string;
-};
+// Enhanced type definitions for better type safety
+type CategoryType = 'nationalities' | 'trophies' | 'teams' | 'teammates' | 'leagues' | 'coaches';
 
-type Player = {
-  _id: string;
-  name: string;
-  image?: string;
-  categories: Category[];
-};
+interface Category {
+  readonly _id: string;
+  readonly name: string;
+  readonly type: CategoryType;
+  readonly slug: string;
+}
 
-type GameState = {
-  selectedPlayers: Array<{ playerId: string; matchCount: number }>;
-  totalPlayersSelected: number;
-};
+interface Player {
+  readonly _id: string;
+  readonly name: string;
+  readonly image?: string;
+  readonly categories: readonly Category[];
+}
+
+interface SelectedPlayer {
+  readonly playerId: string;
+  readonly playerName: string;
+  readonly categoryName: string;
+}
+
+interface BingoGridResponse {
+  readonly grid: readonly (readonly Category[])[];
+  readonly players: readonly SelectedPlayer[];
+}
 
 type CellStatus = 'default' | 'correct' | 'wrong';
+
+
+interface GameError {
+  readonly message: string;
+  readonly code?: string;
+  readonly timestamp: number;
+}
+
+// Type guards for runtime type checking (kept only if used)
+
+// Utility function for creating cell keys
+const createCellKey = (row: number, col: number): string => {
+  return `${row}-${col}`;
+};
+
+// Utility type for validating cell position
+const isValidCellPosition = (row: number, col: number): boolean => {
+  return row >= 0 && row < GAME_CONFIG.GRID_SIZE && col >= 0 && col < GAME_CONFIG.GRID_SIZE;
+};
+
+// Centralized game constants
+const GAME_CONFIG = {
+  MAX_PLAYERS: 42,
+  TIMER_DURATION: 10,
+  WRONG_ANSWER_PENALTY: 2,
+  CORRECT_ANSWER_PENALTY: 1,
+  CELL_RESET_DELAY: 1000,
+  WILDCARD_DELAY: 500,
+  GRID_SIZE: 4,
+  MAX_IMAGE_RETRY_ATTEMPTS: 2,
+} as const;
 
 const getCellClass = (status: CellStatus) => {
   switch (status) {
@@ -34,8 +74,77 @@ const getCellClass = (status: CellStatus) => {
   }
 };
 
+// Optimized logo path function with lookup table and efficient normalization
 const getLogoPath = (slug: string): string | null => {
-  // Simple normalization function that matches our file naming convention
+  // Pre-computed lookup table for common cases (O(1) lookup)
+  const LOGO_LOOKUP: Record<string, string> = {
+    // Tottenham variations
+    'tottenham hotspur': 'tottenham-hotspur',
+    'tottenham-hotspur': 'tottenham-hotspur',
+    'tottenham': 'tottenham-hotspur',
+    
+    // Country variations
+    'portekiz': 'portekiz',
+    'çekya': 'cekiya',
+    'cekiya': 'cekiya',
+    'hırvatistan': 'hirvatistan',
+    'hirvatistan': 'hirvatistan',
+    'croatia': 'hirvatistan',
+    
+    // League variations
+    'i̇talya serie a': 'i̇talya-serie-a',
+    'italya-serie-a': 'i̇talya-serie-a',
+    'italya serie a': 'i̇talya-serie-a',
+    'italy serie a': 'i̇talya-serie-a',
+    'italy-serie-a': 'i̇talya-serie-a',
+    
+    'i̇ngiltere premier league': 'i̇ngiltere-premier-league',
+    'ingiltere-premier-league': 'i̇ngiltere-premier-league',
+    'ingiltere premier league': 'i̇ngiltere-premier-league',
+    'england premier league': 'i̇ngiltere-premier-league',
+    'england-premier-league': 'i̇ngiltere-premier-league',
+    
+    'avrupa şampiyonası': 'avrupa-şampiyonası',
+    'avrupa-şampiyonası': 'avrupa-şampiyonası',
+    'avrupa-sampiyonasi': 'avrupa-şampiyonası',
+    
+    'süper lig': 'süper-lig',
+    'süper-lig': 'süper-lig',
+    'super-lig': 'süper-lig',
+    
+    'dünya kupası': 'dünya-kupası',
+    'dünya-kupası': 'dünya-kupası',
+    'dunya-kupasi': 'dünya-kupası',
+    
+    'afrika kupası': 'afrika-kupası',
+    'afrika-kupası': 'afrika-kupası',
+    'afrika-kupasi': 'afrika-kupası',
+    
+    'uefa şampiyonlar ligi': 'laliga', // Fallback to La Liga
+    'uefa-şampiyonlar-ligi': 'laliga',
+    'uefa-sampiyonlar-ligi': 'laliga',
+    'champions league': 'laliga',
+    'champions-league': 'laliga',
+    
+    'i̇spanya laliga': 'i̇spanya-laliga',
+    'ispanya-laliga': 'i̇spanya-laliga',
+    'spain laliga': 'i̇spanya-laliga',
+    'spain-laliga': 'i̇spanya-laliga',
+    
+    'fildişi sahili': 'fildişi-sahili',
+    'fildişi-sahili': 'fildişi-sahili',
+    'fildisi-sahili': 'fildişi-sahili',
+    'ivory coast': 'fildişi-sahili',
+    'ivory-coast': 'fildişi-sahili',
+    
+    'bayer 04 leverkusen': 'bayer-leverkusen',
+    'bayer-04-leverkusen': 'bayer-leverkusen',
+    
+    'edin visca': 'edin-visca',
+    'edin-visca': 'edin-visca',
+  };
+
+  // Fast normalization function with optimized regex
   const normalizeSlug = (input: string): string => {
     return input.toLowerCase()
       .replace(/\s+/g, '-') // Replace spaces with hyphens
@@ -51,189 +160,67 @@ const getLogoPath = (slug: string): string | null => {
       .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
   };
 
-  // Normalize the slug to match our file naming convention
-  const normalizedSlug = normalizeSlug(slug);
-
-  // Debug logging
-  // console.log(`🔍 Logo search for "${slug}" → normalized: "${normalizedSlug}"`);
-
-  // Special handling for known problematic cases
-  if (slug.includes('Tottenham Hotspur') || slug.includes('tottenham-hotspur') || slug.includes('tottenham hotspur')) {
-    // console.log(`🎯 Direct return for Tottenham Hotspur`);
-    return `/bingo_game_logos/tottenham-hotspur.png`;
+  // Fast lookup in pre-computed table
+  const normalizedInput = normalizeSlug(slug);
+  const directMatch = LOGO_LOOKUP[normalizedInput];
+  if (directMatch) {
+    return `/bingo_game_logos/${directMatch}.png`;
   }
 
-  // Handle common variations for club names
-  if (slug.includes('Tottenham') || slug.includes('tottenham')) {
-    // console.log(`🎯 Direct return for Tottenham (variation)`);
-    return `/bingo_game_logos/tottenham-hotspur.png`;
+  // Check for partial matches in lookup table (fallback)
+  for (const [key, value] of Object.entries(LOGO_LOOKUP)) {
+    if (normalizedInput.includes(key) || key.includes(normalizedInput)) {
+      return `/bingo_game_logos/${value}.png`;
+    }
   }
 
-  // Handle common variations for country names
-  if (slug.includes('Portekiz') || slug.includes('portekiz')) {
-    // console.log(`🎯 Direct return for Portekiz`);
-    return `/bingo_game_logos/portekiz.png`;
+  // Handle Turkish characters efficiently
+  const hasTurkishChars = /[ığüşöçİĞÜŞÖÇ]/.test(slug);
+  if (hasTurkishChars) {
+    return `/bingo_game_logos/${normalizedInput}.png`;
   }
 
-  // Handle common variations for country names with Turkish characters
-  if (slug.includes('Çekya') || slug.includes('çekya') || slug.includes('cekiya')) {
-    // console.log(`🎯 Direct return for Çekya`);
-    return `/bingo_game_logos/cekiya.png`;
-  }
-
-  // Handle common variations for country-league combinations with Turkish characters
-  if (slug.includes('İtalya Serie A') || slug.includes('italya-serie-a') || slug.includes('italya serie a')) {
-    // console.log(`🎯 Direct return for İtalya Serie A`);
-    return `/bingo_game_logos/i̇talya-serie-a.png`; // Using the correct filename with Turkish character
-  }
-
-  // Handle Hırvatistan (Croatia)
-  if (slug.includes('Hırvatistan') || slug.includes('hırvatistan') || slug.includes('hirvatistan') ||
-    slug.includes('Croatia') || slug.includes('croatia')) {
-    // console.log(`🎯 Direct return for Hırvatistan`);
-    return `/bingo_game_logos/hirvatistan.png`; // Using the normalized filename
-  }
-
-  // Handle Dünya Kupası
-  if (slug.includes('Dünya Kupası') || slug.includes('dünya-kupası') || slug.includes('dunya-kupasi')) {
-    // console.log(`🎯 Direct return for Dünya Kupası`);
-    return `/bingo_game_logos/dünya-kupası.png`; // Using the correct filename with Turkish characters
-  }
-
-  // Handle İngiltere Premier League
-  if (slug.includes('İngiltere Premier League') || slug.includes('i̇ngiltere-premier-league') || slug.includes('ingiltere-premier-league') ||
-    slug.includes('England Premier League') || slug.includes('england-premier-league')) {
-    // console.log(`🎯 Direct return for İngiltere Premier League`);
-    return `/bingo_game_logos/i̇ngiltere-premier-league.png`; // Using the correct filename with Turkish character
-  }
-
-  // Handle İtalya Serie A
-  if (slug.includes('İtalya Serie A') || slug.includes('i̇talya-serie-a') || slug.includes('italya-serie-a') ||
-    slug.includes('Italy Serie A') || slug.includes('italy-serie-a')) {
-    // console.log(`🎯 Direct return for İtalya Serie A`);
-    return `/bingo_game_logos/i̇talya-serie-a.png`; // Using the correct filename with Turkish character
-  }
-
-  if (slug.includes('Avrupa Şampiyonası') || slug.includes('avrupa-şampiyonası') || slug.includes('avrupa-sampiyonasi')) {
-    // console.log(`🎯 Direct return for Avrupa Şampiyonası (using UEFA logo)`);
-    return `/bingo_game_logos/avrupa-şampiyonası.png`; // Using the correct filename with Turkish characters
-  }
-
-  if (slug.includes('Süper Lig') || slug.includes('süper-lig') || slug.includes('super-lig')) {
-    // console.log(`🎯 Direct return for Süper Lig (using Turkish league logo)`);
-    return `/bingo_game_logos/süper-lig.png`; // Using the correct filename with Turkish character
-  }
-
-  // Handle Bayer 04 Leverkusen
-  if (slug.includes('Bayer 04 Leverkusen') || slug.includes('bayer-04-leverkusen') || slug.includes('bayer 04 leverkusen')) {
-    // console.log(`🎯 Direct return for Bayer 04 Leverkusen`);
-    return `/bingo_game_logos/bayer-leverkusen.png`;
-  }
-
-  // Handle Afrika Kupası
-  if (slug.includes('Afrika Kupası') || slug.includes('afrika-kupası') || slug.includes('afrika-kupasi')) {
-    // console.log(`🎯 Direct return for Afrika Kupası`);
-    return `/bingo_game_logos/afrika-kupası.png`; // Using the correct filename with Turkish character
-  }
-
-  // Handle UEFA Şampiyonlar Ligi (UEFA Champions League)
-  if (slug.includes('UEFA Şampiyonlar Ligi') || slug.includes('uefa-şampiyonlar-ligi') || slug.includes('uefa-sampiyonlar-ligi') ||
-    slug.includes('Champions League') || slug.includes('champions-league')) {
-    // console.log(`🎯 Direct return for UEFA Şampiyonlar Ligi`);
-    return `/bingo_game_logos/laliga.png`; // Using La Liga logo as fallback for Champions League
-  }
-
-  // Handle İspanya LaLiga
-  if (slug.includes('İspanya LaLiga') || slug.includes('i̇spanya-laliga') || slug.includes('ispanya-laliga') ||
-    slug.includes('Spain LaLiga') || slug.includes('spain-laliga')) {
-    // console.log(`🎯 Direct return for İspanya LaLiga`);
-    return `/bingo_game_logos/i̇spanya-laliga.png`; // Using the correct filename with Turkish character
-  }
-
-  // Handle Fildişi Sahili (Ivory Coast)
-  if (slug.includes('Fildişi Sahili') || slug.includes('fildişi-sahili') || slug.includes('fildisi-sahili') ||
-    slug.includes('Ivory Coast') || slug.includes('ivory-coast')) {
-    // console.log(`🎯 Direct return for Fildişi Sahili`);
-    return `/bingo_game_logos/fildişi-sahili.png`; // Using the correct filename with Turkish characters
-  }
-
-  // Handle other Turkish character cases
-  if (slug.includes('ç') || slug.includes('Ç')) {
-    // console.log(`🎯 Turkish 'ç' detected in "${slug}", trying normalized version`);
-    return `/bingo_game_logos/${normalizedSlug}.png`;
-  }
-
-  // Handle other Turkish characters
-  if (slug.includes('ı') || slug.includes('İ') || slug.includes('ğ') || slug.includes('Ğ') ||
-    slug.includes('ü') || slug.includes('Ü') || slug.includes('ş') || slug.includes('Ş') ||
-    slug.includes('ö') || slug.includes('Ö')) {
-    // console.log(`🎯 Turkish character detected in "${slug}", trying normalized version`);
-    return `/bingo_game_logos/${normalizedSlug}.png`;
-  }
-
-  // Handle any slug with Turkish characters and spaces (comprehensive fallback)
-  if (slug.includes(' ') && (slug.includes('ı') || slug.includes('İ') || slug.includes('ğ') || slug.includes('Ğ') ||
-    slug.includes('ü') || slug.includes('Ü') || slug.includes('ş') || slug.includes('Ş') ||
-    slug.includes('ö') || slug.includes('Ö') || slug.includes('ç') || slug.includes('Ç'))) {
-    // console.log(`🎯 Turkish character with spaces detected in "${slug}", trying normalized version`);
-    return `/bingo_game_logos/${normalizedSlug}.png`;
-  }
-
-  // Handle common variations for player names
-  if (slug.includes('Edin Visca') || slug.includes('edin-visca') || slug.includes('edin visca')) {
-    // console.log(`🎯 Direct return for Edin Visca`);
-    return `/bingo_game_logos/edin-visca.png`;
-  }
-
-  // Return the path if we have a normalized slug
-  return normalizedSlug ? `/bingo_game_logos/${normalizedSlug}.png` : null;
+  // Final fallback
+  return normalizedInput ? `/bingo_game_logos/${normalizedInput}.png` : null;
 };
 
 const BingoGame: React.FC = () => {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [currentGrid, setCurrentGrid] = useState<Category[][]>([]);
+  // Enhanced state with proper typing
+  const [players, setPlayers] = useState<readonly Player[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [currentGrid, setCurrentGrid] = useState<readonly (readonly Category[])[]>([]);
   const [cellStatus, setCellStatus] = useState<Record<string, CellStatus>>({});
   const [lockedCells, setLockedCells] = useState<Set<string>>(new Set());
-  const [timer, setTimer] = useState(10);
+  const [timer, setTimer] = useState<number>(GAME_CONFIG.TIMER_DURATION);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
-  const [gridLoading, setGridLoading] = useState(false);
-  const [wildcardUsed, setWildcardUsed] = useState(false);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
-  const [excludeIds, setExcludeIds] = useState<string[]>([]);
-  const [correctCategories, setCorrectCategories] = useState<{ id: string; name: string }[]>([]);
-  const [gameState, setGameState] = useState<GameState>({
-    selectedPlayers: [],
-    totalPlayersSelected: 0,
-  });
+  const [gridLoading, setGridLoading] = useState<boolean>(false);
+  const [wildcardUsed, setWildcardUsed] = useState<boolean>(false);
+  const [correctCategories, setCorrectCategories] = useState<readonly { readonly id: string; readonly name: string }[]>([]);
   const [failedImageAttempts, setFailedImageAttempts] = useState<Record<string, number>>({});
-  const [memoizedLogoPaths, setMemoizedLogoPaths] = useState<Record<string, string | null>>({});
+  const [availablePlayers, setAvailablePlayers] = useState<readonly SelectedPlayer[]>([]);
+  const [gameEnded, setGameEnded] = useState<boolean>(false);
+  const [gameError, setGameError] = useState<GameError | null>(null);
 
   const currentPlayer = players[currentIndex];
   const timerTriggeredRef = React.useRef(false);
-  const MAX_PLAYERS = 42;
 
-  // Memoized logo path function
-  const getMemoizedLogoPath = React.useCallback((slug: string): string | null => {
-    // Check if we already have this path memoized
-    if (memoizedLogoPaths[slug] !== undefined) {
-      return memoizedLogoPaths[slug];
-    }
-
-    // Calculate the path
-    const path = getLogoPath(slug);
-
-    // Memoize the result
-    setMemoizedLogoPaths(prev => ({
-      ...prev,
-      [slug]: path
-    }));
-
-    return path;
-  }, [memoizedLogoPaths]);
+  // Memoized logo path function with stable cache
+  const getMemoizedLogoPath = React.useMemo(() => {
+    const cache = new Map<string, string | null>();
+    
+    return (slug: string): string | null => {
+      if (cache.has(slug)) {
+        return cache.get(slug)!;
+      }
+      
+      const path = getLogoPath(slug);
+      cache.set(slug, path);
+      return path;
+    };
+  }, []); // No dependencies = stable function
 
   const handlePlayWildcard = () => {
-    if (wildcardUsed || !currentGrid.length) return;
+    if (gameEnded || wildcardUsed || !currentGrid.length) return;
     if (intervalId) clearInterval(intervalId);
     timerTriggeredRef.current = true;
 
@@ -243,10 +230,11 @@ const BingoGame: React.FC = () => {
     const newLockedCells = new Set(lockedCells);
     let lockedCount = 0;
 
+    // Lock all correct categories for current player
     for (let row = 0; row < currentGrid.length; row++) {
       for (let col = 0; col < currentGrid[row].length; col++) {
         const cat = currentGrid[row][col];
-        const key = `${row}-${col}`;
+        const key = createCellKey(row, col);
 
         const isCorrect = correctCategories.some(c => c.name === cat.name);
         if (isCorrect && !newLockedCells.has(key)) {
@@ -263,39 +251,18 @@ const BingoGame: React.FC = () => {
     setLockedCells(newLockedCells);
     setWildcardUsed(true);
 
-    // Prepare new state
-    const currentPlayerId = players[currentIndex]?._id;
-    const updatedCategories = allCategories.filter(id =>
-      !correctCategories.some(c => c.id === id)
-    );
-    const updatedExcludeIds = [...excludeIds, currentPlayerId];
+    console.log(`🃏 Wildcard used! Locked ${lockedCount} cells for current player "${currentPlayer?.name}"`);
 
-    setAllCategories(updatedCategories);
-    setExcludeIds(updatedExcludeIds);
-
-    // Fetch next player with updated game state
-    const updatedGameState = {
-      selectedPlayers: [...gameState.selectedPlayers, { playerId: currentPlayerId, matchCount: correctCategories.length }],
-      totalPlayersSelected: gameState.totalPlayersSelected + 1,
-    };
-
-    fetchMatchingPlayer(updatedCategories, updatedExcludeIds, updatedGameState)
-      .then(result => {
-        console.log('Wildcard player selected:', result.playerName, 'with', result.matchCount, 'matches');
-        console.log('✅ Correct matches for', result.playerName, ':', result.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-        setPlayers(prev => [
-          ...prev,
-          { _id: result.playerId, name: result.playerName, categories: [] },
-        ]);
-        setCorrectCategories(result.matchedCategories);
-        setCurrentIndex(prev => prev + 1);
-        setTimer(10);
-
-        // Update game state
-        setGameState(updatedGameState);
-      })
-      .catch(err => console.error('Wildcard fetch failed:', err))
-      .finally(() => setGridLoading(false));
+    // Move to next player from available players
+    setTimeout(() => {
+      const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
+      
+      if (!hasNextPlayer) {
+        console.log('🎉 All players used! Game should end soon...');
+      }
+      
+      setGridLoading(false);
+    }, GAME_CONFIG.WILDCARD_DELAY); // Small delay to show the wildcard effect
   };
 
   useEffect(() => {
@@ -303,36 +270,85 @@ const BingoGame: React.FC = () => {
       try {
         setGridLoading(true);
 
-        const res = await axios.get<{ grid: Category[][] }>(`${API_BASE_URL}/bingo/balanced-grid`);
-        const gridFromApi = res.data.grid;
+        // Fetch both grid and players from the new API
+        const res = await axios.get<BingoGridResponse>(`${API_BASE_URL}/bingo/balanced-grid`);
+        const { grid: gridFromApi, players: playersFromApi } = res.data;
 
+        // Set the grid
         setCurrentGrid(gridFromApi);
         setCellStatus({});
 
-        const flatCategoryIds = gridFromApi.flat().map((cat: { _id: string; name: string; type: string; slug?: string }) => cat._id);
-        setAllCategories(flatCategoryIds);
+        // Store the available players from backend
+        setAvailablePlayers(playersFromApi);
+
+        // Log player distribution by category
+        const playersByCategory = playersFromApi.reduce((acc, player) => {
+          if (!acc[player.categoryName]) {
+            acc[player.categoryName] = [];
+          }
+          acc[player.categoryName].push(player.playerName);
+          return acc;
+        }, {} as Record<string, string[]>);
+
+        // Log detailed player distribution with names and counts
+        console.log('📋 DETAILED PLAYER DISTRIBUTION:');
+        console.log('═'.repeat(80));
+        Object.entries(playersByCategory).forEach(([category, players]) => {
+          console.log(`${category}: ${players.length} → [${players.join(', ')}]`);
+        });
+        console.log('═'.repeat(80));
+
 
         try {
-          const result = await fetchMatchingPlayer(flatCategoryIds, [], gameState);
-          console.log('Initial player selected:', result.playerName, 'with', result.matchCount, 'matches');
-          console.log('✅ Correct matches for', result.playerName, ':', result.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-          setPlayers([{ _id: result.playerId, name: result.playerName, categories: [] }]);
-          setExcludeIds([result.playerId]);
-          setCorrectCategories(result.matchedCategories);
-
-          // Update game state after first player
-          setGameState({
-            selectedPlayers: [{ playerId: result.playerId, matchCount: result.matchCount }],
-            totalPlayersSelected: 1,
-          });
+          // Randomize the order of players for gameplay
+          if (playersFromApi.length > 0) {
+            const randomizedPlayers = [...playersFromApi].sort(() => Math.random() - 0.5);
+                    
+            // Convert SelectedPlayer to Player format and set all 42 players
+            const gamePlayersInOrder = randomizedPlayers.map((selectedPlayer, index) => ({
+              _id: selectedPlayer.playerId,
+              name: selectedPlayer.playerName,
+              categories: [], // We don't need categories for display
+            }));
+            
+            setPlayers(gamePlayersInOrder);
+            
+            // Set up the first player's matching categories
+            const firstPlayer = randomizedPlayers[0];
+            const firstPlayerCategories = [{ id: firstPlayer.categoryName, name: firstPlayer.categoryName }];
+            
+            setCorrectCategories(firstPlayerCategories);
+            setCurrentIndex(0); // Start with first player
+            
+            console.log(`🎯 Game Started - Player 1: ${firstPlayer.playerName} ✅ Correct Category: "${firstPlayer.categoryName}"`);                        
+          } else {
+            // No players available from backend
+            console.error('❌ No players available from backend');
+            setGameError({
+              message: 'No players available from server',
+              code: 'NO_PLAYERS',
+              timestamp: Date.now()
+            });
+            setPlayers([]);
+            setCorrectCategories([]);
+          }
         } catch (err) {
-          console.error('Failed to fetch initial player:', err);
-          // Fallback to mock player if API fails
-          setPlayers([{ _id: 'mock-player', name: 'Test Player', categories: [] }]);
-          setCorrectCategories([{ id: 'mock-category', name: 'Mock Category' }]);
+          console.error('Failed to setup players:', err);
+          setGameError({
+            message: 'Failed to setup players',
+            code: 'SETUP_ERROR',
+            timestamp: Date.now()
+          });
+          setPlayers([]);
+          setCorrectCategories([]);
         }
       } catch (err) {
         console.error('Failed to load balanced grid:', err);
+        setGameError({
+          message: 'Failed to load game data',
+          code: 'LOAD_ERROR',
+          timestamp: Date.now()
+        });
       } finally {
         setGridLoading(false);
       }
@@ -342,28 +358,17 @@ const BingoGame: React.FC = () => {
   }, []);
 
 
-  const fetchMatchingPlayer = async (categories: string[], excludeIds: string[] = [], gameState?: {
-    selectedPlayers: Array<{ playerId: string; matchCount: number }>;
-    totalPlayersSelected: number;
-  }) => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/bingo/select-player-smart`, {
-        categories,
-        excludeIds,
-        gameState,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching matching player:', error);
-      throw error;
-    }
-  };
+  // No longer needed - we get all players from the grid API
+  // const fetchMatchingPlayer = removed
 
   useEffect(() => {
+    // Skip timer setup if no current player
+    if (!currentPlayer) return;
+    
     timerTriggeredRef.current = false;
     if (intervalId) clearInterval(intervalId);
 
-    setTimer(10); // reset timer each turn
+    setTimer(GAME_CONFIG.TIMER_DURATION); // reset timer each turn
 
     const id = setInterval(() => {
       setTimer(prev => {
@@ -373,7 +378,7 @@ const BingoGame: React.FC = () => {
             clearInterval(id);
             handleSkip(); // call your skip handler!
           }
-          return 10; // reset timer for next turn
+          return GAME_CONFIG.TIMER_DURATION; // reset timer for next turn
         }
         return prev - 1;
       });
@@ -382,13 +387,13 @@ const BingoGame: React.FC = () => {
     setIntervalId(id);
 
     return () => clearInterval(id);
-  }, [players.length]);
+  }, [currentIndex, currentPlayer]); // Fixed: depend on currentIndex instead of players.length
 
 
-  const isGameWon = (grid: Category[][], locked: Set<string>) => {
+  const isGameWon = (grid: readonly (readonly Category[])[], locked: Set<string>): boolean => {
     for (let row = 0; row < grid.length; row++) {
       for (let col = 0; col < grid[row].length; col++) {
-        const key = `${row}-${col}`;
+        const key = createCellKey(row, col);
         if (!locked.has(key)) {
           return false; // found an unlocked cell, game not won yet
         }
@@ -397,163 +402,171 @@ const BingoGame: React.FC = () => {
     return true; // all cells are locked
   };
 
-  const handleCellClick = (cell: Category, row: number, col: number) => {
-    const key = `${row}-${col}`;
-    if (lockedCells.has(key) || cellStatus[key] === 'correct') return;
+  const getNextPlayerFromAvailable = (currentPlayerIndex: number): boolean => {
+    const nextIndex = currentPlayerIndex + 1;
+    if (nextIndex < availablePlayers.length) {
+      const nextSelectedPlayer = availablePlayers[nextIndex];
+      if (!nextSelectedPlayer) {
+        console.warn('Next player not found at index:', nextIndex);
+        return false;
+      }
+      
+      const nextPlayerCategories: readonly { readonly id: string; readonly name: string }[] = [
+        { id: nextSelectedPlayer.categoryName, name: nextSelectedPlayer.categoryName }
+      ];
+      
+      // Log the next player details
+      console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} ✅ Correct Category: "${nextSelectedPlayer.categoryName}"`);
+            
+      setCorrectCategories(nextPlayerCategories);
+      setCurrentIndex(nextIndex);
+      
+      return true;
+    }
+    return false; // No more players available
+  };
+
+  const handleCellClick = (cell: Category, row: number, col: number): void => {
+    if (!isValidCellPosition(row, col)) {
+      console.warn('Invalid cell position:', { row, col });
+      return;
+    }
+    
+    const key = createCellKey(row, col);
+    if (gameEnded || lockedCells.has(key) || cellStatus[key] === 'correct') return;
     if (intervalId) clearInterval(intervalId);
 
     timerTriggeredRef.current = true;
 
-    // Debug logging to see what's happening
-    console.log('🔍 Cell Click Debug:');
-    console.log('  - Clicked category:', cell.name, '(ID:', cell._id, ')');
-    console.log('  - Current player:', currentPlayer?.name);
-    console.log('  - Correct categories for current player:', correctCategories.map(c => `${c.name} (ID: ${c.id})`));
-
     const isCorrect = correctCategories.some(mc => mc.name === cell.name);
-    console.log('  - Is this correct?', isCorrect);
-
-    const currentPlayerId = players[currentIndex]?._id;
     const updatedStatus = { ...cellStatus };
+
 
     if (isCorrect) {
       updatedStatus[key] = 'correct';
       setCellStatus(updatedStatus);
       setLockedCells(prev => new Set(prev).add(key));
 
-      const updatedCategories = allCategories.filter(id => id !== cell._id);
-      const updatedExcludeIds = [...excludeIds, currentPlayerId];
-
-      setAllCategories(updatedCategories);
-      setExcludeIds(updatedExcludeIds);
-
-      // Fetch next player with updated game state
-      const updatedGameState = {
-        selectedPlayers: [...gameState.selectedPlayers, { playerId: currentPlayerId, matchCount: correctCategories.length }],
-        totalPlayersSelected: gameState.totalPlayersSelected + 1,
-      };
-
-      fetchMatchingPlayer(updatedCategories, updatedExcludeIds, updatedGameState)
-        .then(result => {
-          console.log('Correct match player selected:', result.playerName, 'with', result.matchCount, 'matches');
-          console.log('✅ Correct matches for', result.playerName, ':', result.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-          setPlayers(prev => [
-            ...prev,
-            { _id: result.playerId, name: result.playerName, categories: [] },
-          ]);
-          setCorrectCategories(result.matchedCategories);
-          setCurrentIndex(prev => prev + 1);
-
-          // Update game state
-          setGameState(updatedGameState);
-        })
-        .catch(err => console.error('Error fetching new player:', err));
+      console.log(`✅ MATCH FOUND! Player "${currentPlayer?.name}" correctly matched category "${cell.name}"`);
+      
+      
+      // Move to next player from available players
+      const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
+      
+      if (!hasNextPlayer) {
+        console.log('🎯 GAME ENDED! All players exhausted after correct match');
+      }  
     } else {
       updatedStatus[key] = 'wrong';
       setCellStatus(updatedStatus);
-
+      
+      console.log(`❌ WRONG MATCH! Player "${currentPlayer?.name}" incorrectly selected "${cell.name}" (expected: "${correctCategories[0]?.name}")`);
+      
       setTimeout(() => {
         setCellStatus(prev => ({ ...prev, [key]: 'default' }));
-      }, 1000);
+      }, GAME_CONFIG.CELL_RESET_DELAY);
 
-      const updatedExcludeIds = [...excludeIds, currentPlayerId];
-      setExcludeIds(updatedExcludeIds);
-
-      // Fetch first player after wrong match
-      const updatedGameState = {
-        selectedPlayers: [...gameState.selectedPlayers, { playerId: currentPlayerId, matchCount: 0 }],
-        totalPlayersSelected: gameState.totalPlayersSelected + 1,
-      };
-
-      fetchMatchingPlayer(allCategories, updatedExcludeIds, updatedGameState)
-        .then(result => {
-          console.log('Wrong match - first player selected:', result.playerName, 'with', result.matchCount, 'matches');
-          console.log('✅ Correct matches for', result.playerName, ':', result.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-          setPlayers(prev => [
-            ...prev,
-            { _id: result.playerId, name: result.playerName, categories: [] },
-          ]);
-          setCorrectCategories(result.matchedCategories);
-          setExcludeIds(updatedExcludeIds);
-          setCurrentIndex(prev => prev + 1);
-
-          // Update game state for first player
-          setGameState(updatedGameState);
-
-          // Fetch second player after skip
-          const secondPlayerGameState = {
-            selectedPlayers: [...updatedGameState.selectedPlayers, { playerId: result.playerId, matchCount: result.matchCount }],
-            totalPlayersSelected: updatedGameState.totalPlayersSelected + 1,
-          };
-
-          fetchMatchingPlayer(allCategories, [...updatedExcludeIds, result.playerId], secondPlayerGameState)
-                          .then(skipResult => {
-                console.log('Wrong match - second player selected:', skipResult.playerName, 'with', skipResult.matchCount, 'matches');
-                console.log('✅ Correct matches for', skipResult.playerName, ':', skipResult.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-                setPlayers(prev => [
-                ...prev,
-                { _id: skipResult.playerId, name: skipResult.playerName, categories: [] },
-              ]);
-              setCorrectCategories(skipResult.matchedCategories);
-              setExcludeIds(prev => [...prev, skipResult.playerId]);
-              setCurrentIndex(prev => prev + 1);
-
-              // Update game state for second player
-              setGameState(secondPlayerGameState);
-            })
-            .catch(err => console.error('Error fetching 2nd skip player:', err));
-        })
-        .catch(err => console.error('Error fetching first skip player:', err));
+      
+      // Move to next player from available players (skip current + 1 more for wrong answer)
+      // For wrong answers, we need to skip 2 players total (current + 1 additional)
+      const nextIndex = currentIndex + GAME_CONFIG.WRONG_ANSWER_PENALTY; // Skip players for wrong answer
+      
+      // Check if this wrong answer ends the game
+      if (currentIndex >= availablePlayers.length - 1) {
+        console.log('🎯 GAME ENDED! Last player made wrong selection - no more players available');
+        setGameEnded(true);
+        return; // End the game immediately
+      }
+      
+      if (nextIndex < availablePlayers.length) {
+        const nextSelectedPlayer = availablePlayers[nextIndex];
+        const nextPlayerCategories = [{ id: nextSelectedPlayer.categoryName, name: nextSelectedPlayer.categoryName }];
+        
+        console.log(`⚠️ Wrong answer penalty: Skipping 2 players (from ${currentIndex + 1} to ${nextIndex + 1})`);
+        console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} ✅ Correct Category: "${nextSelectedPlayer.categoryName}"`);
+        
+        setCorrectCategories(nextPlayerCategories);
+        setCurrentIndex(nextIndex);
+      } else {
+        console.log('🎯 GAME ENDED! Wrong answer penalty would exceed available players');
+        setGameEnded(true);
+        return; // End the game immediately
+      }
     }
   };
 
   const handleSkip = () => {
+    if (gameEnded) return;
     timerTriggeredRef.current = true;
     if (intervalId) clearInterval(intervalId);
-
-    const currentPlayerId = players[currentIndex]?._id;
-    const updatedExcludeIds = [...excludeIds, currentPlayerId];
-    setExcludeIds(updatedExcludeIds);
-
-    // Fetch player after skip with updated game state
-    const updatedGameState = {
-      selectedPlayers: [...gameState.selectedPlayers, { playerId: currentPlayerId, matchCount: 0 }],
-      totalPlayersSelected: gameState.totalPlayersSelected + 1,
-    };
-
-    fetchMatchingPlayer(allCategories, updatedExcludeIds, updatedGameState)
-      .then(result => {
-        console.log('Skip player selected:', result.playerName, 'with', result.matchCount, 'matches');
-        console.log('✅ Correct matches for', result.playerName, ':', result.matchedCategories.map((cat: { id: string; name: string }) => cat.name).join(', '));
-        setPlayers(prev => [
-          ...prev,
-          { _id: result.playerId, name: result.playerName, categories: [] },
-        ]);
-        setCorrectCategories(result.matchedCategories);
-        setCurrentIndex(prev => prev + 1);
-
-        // Update game state
-        setGameState(updatedGameState);
-      })
-      .catch(err => console.error('Error fetching player after skip:', err));
+    
+    // Move to next player from available players
+    const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
+    
+    if (!hasNextPlayer) {
+      console.log('🎯 GAME ENDED! All players exhausted after skip');
+    }
   };
 
-  const startNewGame = () => {
+  const startNewGame = (): void => {
     if (intervalId) clearInterval(intervalId);
     timerTriggeredRef.current = true;
     setLockedCells(new Set());
     setFailedImageAttempts({}); // Reset failed image attempts
-    setMemoizedLogoPaths({}); // Reset memoized logo paths
+    setGameError(null); // Reset error state
     window.location.reload();
   };
 
   const allCellsLocked = isGameWon(currentGrid, lockedCells);
 
-  if (!currentPlayer || currentIndex >= MAX_PLAYERS || allCellsLocked) {
+  // Check if game should end or show error
+  const shouldEndGame = gameEnded || !currentPlayer || currentIndex >= availablePlayers.length || allCellsLocked;
+  const shouldShowError = gameError || (players.length === 0 && !gridLoading);
+  
+  if (shouldShowError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4">
+        <h2 className="text-2xl font-bold text-red-500">❌ Game Error</h2>
+        <p className="text-lg text-white/80 text-center">
+          {gameError?.message || 'No players available to start the game'}
+        </p>
+        {gameError?.code && (
+          <p className="text-sm text-white/60 text-center mt-2">
+            Error Code: {gameError.code}
+          </p>
+        )}
+        <button onClick={startNewGame} className="bg-emerald-500 px-6 py-2 rounded-md text-black font-semibold">
+          Try Again
+        </button>
+      </div>
+    );
+  }
+  
+  if (shouldEndGame) {
     if (intervalId) clearInterval(intervalId);
+    
+    // Log game end reason
+    if (gameEnded) {
+      console.log('🎯 GAME ENDED! Game ended due to player exhaustion or penalty.');
+    } else if (allCellsLocked) {
+      console.log('🏆 GAME WON! All cells are locked!');
+    } else if (currentIndex >= availablePlayers.length) {
+      console.log('🎯 GAME ENDED! All players have been used or exhausted.');
+    } else if (!currentPlayer) {
+      console.log('❓ GAME ENDED! No current player available.');
+    } else {
+      console.log('❓ GAME ENDED! Unknown reason.');
+    }
+    
     return (
       <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4">
         <h2 className="text-2xl font-bold">🎉 Game Over</h2>
+        <p className="text-lg text-white/80">
+          {gameEnded ? 'All players exhausted!' :
+           allCellsLocked ? 'Congratulations! You completed the grid!' : 
+           currentIndex >= availablePlayers.length ? 'All players exhausted!' : 
+           'Game ended'}
+        </p>
         <button onClick={startNewGame} className="bg-emerald-500 px-6 py-2 rounded-md text-black font-semibold">
           Start Again
         </button>
@@ -595,15 +608,15 @@ const BingoGame: React.FC = () => {
 
           <div className="flex justify-end">
             <span className="text-xs text-white/70 whitespace-nowrap">
-              {MAX_PLAYERS - currentIndex} PLAYERS LEFT
+              {GAME_CONFIG.MAX_PLAYERS - currentIndex} PLAYERS LEFT
             </span>
           </div>
         </div>
       </div>
       <div className="w-full max-w-3xl bg-[#1e2033] p-4 rounded-md mx-auto">
         <div className="flex flex-col gap-2">
-          {currentGrid.map((row, rowIndex) => (
-            <div key={rowIndex} className="grid grid-cols-4 gap-2">
+           {currentGrid.map((row, rowIndex) => (
+             <div key={rowIndex} className="grid grid-cols-4 gap-2">
               {row.map((cat, colIndex) => {
                 const key = `${rowIndex}-${colIndex}`;
                 const logoPath = getMemoizedLogoPath(cat.slug);
@@ -618,7 +631,7 @@ const BingoGame: React.FC = () => {
                       '🔒'
                     ) : (
                       <>
-                        {logoPath && (!failedImageAttempts[logoPath] || failedImageAttempts[logoPath] < 2) ? (
+                        {logoPath && (!failedImageAttempts[logoPath] || failedImageAttempts[logoPath] < GAME_CONFIG.MAX_IMAGE_RETRY_ATTEMPTS) ? (
                           <Image
                             src={logoPath}
                             alt={cat.name}
@@ -629,10 +642,8 @@ const BingoGame: React.FC = () => {
                               const currentAttempts = failedImageAttempts[logoPath] || 0;
                               const newAttempts = currentAttempts + 1;
 
-                              // console.log(`❌ Failed to load logo for "${cat.name}" (slug: "${cat.slug}") at path: ${logoPath} - Attempt ${newAttempts}/2`);
 
-                              if (newAttempts >= 2) {
-                                // console.log(`🛑 Stopping retry attempts for ${logoPath} after 2 failures`);
+                              if (newAttempts >= GAME_CONFIG.MAX_IMAGE_RETRY_ATTEMPTS) {
                                 e.currentTarget.style.display = 'none';
                               }
 
@@ -642,7 +653,7 @@ const BingoGame: React.FC = () => {
                               }));
                             }}
                           />
-                        ) : logoPath && failedImageAttempts[logoPath] >= 2 ? (
+                        ) : logoPath && failedImageAttempts[logoPath] >= GAME_CONFIG.MAX_IMAGE_RETRY_ATTEMPTS ? (
                           <div className="w-6 h-6 mb-1 bg-gray-500 rounded flex items-center justify-center text-white text-xs">
                             ❌
                           </div>
