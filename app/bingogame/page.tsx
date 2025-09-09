@@ -521,7 +521,20 @@ const BingoGame: React.FC = () => {
 
   // Check if game should end or show error
   const shouldEndGame = gameEnded || !currentPlayer || currentIndex >= availablePlayers.length || allCellsLocked;
-  const shouldShowError = gameError || (players.length === 0 && !gridLoading);
+  const shouldShowError = gameError || (players.length === 0 && !gridLoading && availablePlayers.length === 0);
+  
+  // Show loading screen while fetching data
+  if (gridLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600] mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Loading Game...</h2>
+          <p className="text-lg text-white/80">Fetching players and categories</p>
+        </div>
+      </div>
+    );
+  }
   
   if (shouldShowError) {
     return (

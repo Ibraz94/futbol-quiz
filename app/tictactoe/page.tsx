@@ -53,6 +53,16 @@
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
             setPairs(res.data.pairs);
+            if (res.data.cannotMatch) {
+              console.log('🚫 CannotMatch Data for Selected Categories:');
+              for (const category of [...res.data.top, ...res.data.left]) {
+                const categoryId = category.categoryId;
+                const cannotMatchList = res.data.cannotMatch[categoryId] || [];
+                console.log(`   ${category.name} (ID: ${categoryId})`);
+                console.log(`      Cannot match with IDs: [${cannotMatchList.join(', ')}]`);
+              }
+            }
+            
             setLoading(false);
             gridLoaded = true;
             if (playersLoaded) setDataReady(true);
@@ -202,6 +212,16 @@
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
             setPairs(res.data.pairs);
+            if (res.data.cannotMatch) {
+              console.log('🚫 CannotMatch Data for Selected Categories:');
+              for (const category of [...res.data.top, ...res.data.left]) {
+                const categoryId = category.categoryId;
+                const cannotMatchList = res.data.cannotMatch[categoryId] || [];
+                console.log(`   ${category.name} (ID: ${categoryId})`);
+                console.log(`      Cannot match with IDs: [${cannotMatchList.join(', ')}]`);
+              }
+            }
+            
             setLoading(false);
           })
           .catch(err => {
@@ -379,9 +399,6 @@
               </div>
               {topCategories.map((cat, i) => (
                 <div key={i} className="flex-1 flex flex-col items-center justify-center h-full px-1">
-                  <span className="text-center w-full break-words leading-tight text-sm font-bold mb-2" style={{ lineHeight: '1.2' }}>
-                    {cat.name}
-                  </span>
                   <Image
                     src={getCategoryIconPath(cat.categoryId)}
                     alt={cat.name}
@@ -393,6 +410,9 @@
                       e.currentTarget.style.display = 'none';
                     }}
                   />
+                  <span className="text-center w-full break-words leading-tight text-sm font-bold" style={{ lineHeight: '1.2' }}>
+                    {cat.name}
+                  </span>
                 </div>
               ))}
             </div>
@@ -400,9 +420,6 @@
             {leftCategories.map((leftCat, row) => (
               <div key={row} className="flex items-center" style={{ minHeight: 120 }}>
                 <div className="w-[180px] flex flex-col items-center justify-center px-2">
-                  <span className="text-sm font-bold text-center w-full break-words leading-tight mb-2" style={{ lineHeight: '1.2' }}>
-                    {leftCat.name}
-                  </span>
                   <Image
                     src={getCategoryIconPath(leftCat.categoryId)}
                     alt={leftCat.name}
@@ -414,6 +431,9 @@
                       e.currentTarget.style.display = 'none';
                     }}
                   />
+                  <span className="text-sm font-bold text-center w-full break-words leading-tight" style={{ lineHeight: '1.2' }}>
+                    {leftCat.name}
+                  </span>
                 </div>
                 {topCategories.map((topCat, col) => {
                   const pair = findPair(topCat, leftCat);
