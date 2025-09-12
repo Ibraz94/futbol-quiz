@@ -17,6 +17,9 @@
   const [players, setPlayers] = useState<any[]>([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [playersError, setPlayersError] = useState<string | null>(null);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]); // Store all players for the entire session
+  const [suggestions, setSuggestions] = useState<any[]>([]); // Real-time search suggestions
+  const [showSuggestions, setShowSuggestions] = useState(false); // Show/hide suggestions dropdown
   const [activePair, setActivePair] = useState<string[] | null>(null);
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
@@ -43,6 +46,24 @@
       const [currentTurn, setCurrentTurn] = useState<'X' | 'O'>('X');
       const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
 
+      // Fetch all players when page loads
+      useEffect(() => {
+        const fetchAllPlayers = async () => {
+          try {
+            console.log('🎯 Fetching all players for the session...');
+            const response = await axios.get(`${API_BASE_URL}/tictactoe/players`);
+            const players = response.data.players || [];
+            setAllPlayers(players);
+            console.log(`✅ Loaded ${players.length} players for the session`);
+          } catch (error) {
+            console.error('❌ Error fetching all players:', error);
+            setAllPlayers([]);
+          }
+        };
+
+        fetchAllPlayers();
+      }, []);
+
       useEffect(() => {
         let gridLoaded = false;
         let playersLoaded = false;
@@ -53,6 +74,28 @@
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
             setPairs(res.data.pairs);
+            
+            // Log complete details of all 6 categories to demonstrate league filtering
+            console.log('═'.repeat(80));
+            console.log(`🏆 COMPLETE CATEGORY DETAILS FOR LEAGUE: ${league.toUpperCase()}`);
+            console.log('═'.repeat(80));
+            
+            console.log('📋 TOP CATEGORIES (3 categories):');
+            res.data.top.forEach((category: any, index: number) => {
+              console.log(`   ${index + 1}. ${category.name}`);
+              console.log(`      └─ Complete Object:`, JSON.stringify(category, null, 6));
+            });
+            
+            console.log('📋 LEFT CATEGORIES (3 categories):');
+            res.data.left.forEach((category: any, index: number) => {
+              console.log(`   ${index + 1}. ${category.name}`);
+              console.log(`      └─ Complete Object:`, JSON.stringify(category, null, 6));
+            });
+            
+            console.log('═'.repeat(80));
+            console.log(`✅ TOTAL: ${res.data.top.length + res.data.left.length} categories loaded for ${league}`);
+            console.log('═'.repeat(80));
+            
             if (res.data.cannotMatch) {
               console.log('🚫 CannotMatch Data for Selected Categories:');
               for (const category of [...res.data.top, ...res.data.left]) {
@@ -71,10 +114,53 @@
             setError("Failed to load grid categories");
             setLoading(false);
           });
-        // No need to fetch players separately - grid contains all valid player-category pairs
-        playersLoaded = true;
-        if (gridLoaded) setDataReady(true);
-      }, []);
+        
+        // Check if players are already loaded
+        playersLoaded = allPlayers.length > 0;
+        if (gridLoaded && playersLoaded) setDataReady(true);
+      }, [allPlayers]);
+
+      // Real-time suggestions as user types
+      useEffect(() => {
+        if (!modalOpen || !activePair || !search) {
+          setSuggestions([]);
+          setShowSuggestions(false);
+          return;
+        }
+
+        // Generate suggestions based on search input
+        const searchTerm = search.toLowerCase().trim();
+        if (searchTerm.length < 2) {
+          setSuggestions([]);
+          setShowSuggestions(false);
+          return;
+        }
+
+        // Filter players for suggestions (more aggressive matching)
+        const filteredSuggestions = allPlayers
+          .filter((player: any) => {
+            const playerName = player['Player Name']?.toLowerCase() || '';
+            return playerName.includes(searchTerm);
+          })
+          .slice(0, 8) // Limit to 8 suggestions for better UX
+          .sort((a: any, b: any) => {
+            // Sort by relevance (exact matches first, then starts with, then contains)
+            const aName = a['Player Name']?.toLowerCase() || '';
+            const bName = b['Player Name']?.toLowerCase() || '';
+            
+            if (aName.startsWith(searchTerm) && !bName.startsWith(searchTerm)) return -1;
+            if (!aName.startsWith(searchTerm) && bName.startsWith(searchTerm)) return 1;
+            if (aName === searchTerm && bName !== searchTerm) return -1;
+            if (aName !== searchTerm && bName === searchTerm) return 1;
+            
+            return aName.localeCompare(bName);
+          });
+
+        setSuggestions(filteredSuggestions);
+        setShowSuggestions(filteredSuggestions.length > 0);
+        
+        console.log(`💡 Generated ${filteredSuggestions.length} suggestions for: "${search}"`);
+      }, [search, allPlayers, modalOpen, activePair]);
 
       // Filter players for the modal when modal is open, activePair or search changes
       useEffect(() => {
@@ -82,24 +168,24 @@
         setPlayersLoading(true);
         setPlayersError(null);
         
-        // Find the valid players for this cell from the grid data
-        const pair = findPair(
-          { name: activePair[0], slug: '', categoryId: 0 }, 
-          { name: activePair[1], slug: '', categoryId: 0 }
-        );
+        // Use pre-loaded players instead of making API calls
+        let filteredPlayers = allPlayers;
         
-        if (pair) {
-          // Filter the valid players by search term
-          const filtered = pair.players.filter(playerName =>
-            !search || playerName.toLowerCase().includes(search.toLowerCase())
+        // Filter by search term if provided
+        if (search) {
+          filteredPlayers = allPlayers.filter((player: any) =>
+            player['Player Name']?.toLowerCase().includes(search.toLowerCase())
           );
-          setPlayers(filtered.map(playerName => ({ playerName })));
-        } else {
-          setPlayers([]);
         }
         
+        // Limit to first 50 players for performance
+        filteredPlayers = filteredPlayers.slice(0, 50);
+        
+        setPlayers(filteredPlayers);
         setPlayersLoading(false);
-      }, [modalOpen, search, activePair, pairs]);
+        
+        console.log(`🔍 Filtered ${filteredPlayers.length} players for search: "${search}"`);
+      }, [modalOpen, search, activePair, allPlayers]);
 
       // Timer effect: start/reset on turn change, but only if dataReady
       useEffect(() => {
@@ -193,6 +279,18 @@
         setModalOpen(true);
         setActivePair([topCategories[col].name, leftCategories[row].name]);
         setActiveCell({ row, col });
+        setSearch(""); // Clear search when opening modal
+        setShowSuggestions(false); // Hide suggestions when opening modal
+      }
+
+      // Handle suggestion selection
+      function handleSuggestionSelect(playerName: string) {
+        setSearch(playerName);
+        setShowSuggestions(false);
+        // Auto-select the player after a short delay
+        setTimeout(() => {
+          handlePlayerSelect(playerName);
+        }, 100);
       }
 
       // Reset board and fetch new grid
@@ -212,6 +310,28 @@
             setTopCategories(res.data.top);
             setLeftCategories(res.data.left);
             setPairs(res.data.pairs);
+            
+            // Log complete details of all 6 categories to demonstrate league filtering
+            console.log('═'.repeat(80));
+            console.log(`🏆 COMPLETE CATEGORY DETAILS FOR LEAGUE: ${league.toUpperCase()}`);
+            console.log('═'.repeat(80));
+            
+            console.log('📋 TOP CATEGORIES (3 categories):');
+            res.data.top.forEach((category: any, index: number) => {
+              console.log(`   ${index + 1}. ${category.name}`);
+              console.log(`      └─ Complete Object:`, JSON.stringify(category, null, 6));
+            });
+            
+            console.log('📋 LEFT CATEGORIES (3 categories):');
+            res.data.left.forEach((category: any, index: number) => {
+              console.log(`   ${index + 1}. ${category.name}`);
+              console.log(`      └─ Complete Object:`, JSON.stringify(category, null, 6));
+            });
+            
+            console.log('═'.repeat(80));
+            console.log(`✅ TOTAL: ${res.data.top.length + res.data.left.length} categories loaded for ${league}`);
+            console.log('═'.repeat(80));
+            
             if (res.data.cannotMatch) {
               console.log('🚫 CannotMatch Data for Selected Categories:');
               for (const category of [...res.data.top, ...res.data.left]) {
@@ -233,12 +353,21 @@
       // On player select in modal
       function handlePlayerSelect(playerName: string) {
         if (!activePair || !activeCell) return;
-        // Find valid answers for this cell
+        
+        // Find valid answers for this cell from the grid data
         const pair = findPair(
           { name: activePair[0], slug: '', categoryId: 0 }, 
           { name: activePair[1], slug: '', categoryId: 0 }
         );
-        if (pair && pair.players.includes(playerName)) {
+        
+        // Check if the selected player is a correct answer
+        const isCorrectAnswer = pair && pair.players.includes(playerName);
+        
+        console.log(`🎯 Player "${playerName}" selected for ${activePair[0]} + ${activePair[1]}`);
+        console.log(`✅ Correct answers: [${pair?.players.join(', ') || 'None'}]`);
+        console.log(`🎮 Result: ${isCorrectAnswer ? 'CORRECT ✅' : 'WRONG ❌'}`);
+        
+        if (isCorrectAnswer) {
           // Correct answer: lock cell, set image, set answer, alternate turn, increment score
           setCellStates(prev => {
             const newStates = prev.map(row => row.map(cell => ({ ...cell })));
@@ -302,6 +431,8 @@
           setSearch("");
           setActivePair(null);
           setActiveCell(null);
+          setShowSuggestions(false);
+          setSuggestions([]);
         } else {
           // Wrong answer: close modal and skip turn
           setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
@@ -309,6 +440,8 @@
           setSearch("");
           setActivePair(null);
           setActiveCell(null);
+          setShowSuggestions(false);
+          setSuggestions([]);
         }
       }
 
@@ -324,6 +457,8 @@
           setSearch("");
           setActivePair(null);
           setActiveCell(null);
+          setShowSuggestions(false);
+          setSuggestions([]);
         }
         // If not confirmed, do nothing (let user try again)
       }
@@ -482,13 +617,41 @@
               <div className="bg-white text-black rounded-xl p-6 max-w-lg w-full shadow-2xl relative flex flex-col">
                 <h2 className="text-xl font-bold mb-2">Player Search</h2>
                 <div className="text-sm mb-2 text-gray-700">Find a player for <b>{activePair[0]}</b> + <b>{activePair[1]}</b></div>
-                <input
-                  className="w-full border-2 border-lime-300 rounded-md px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-lime-400 text-lg"
-                  placeholder="Search player..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  autoFocus
-                />
+                <div className="relative mb-4">
+                  <input
+                    className="w-full border-2 border-lime-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-lime-400 text-lg"
+                    placeholder="Search player..."
+                    value={search}
+                    onChange={e => {
+                      setSearch(e.target.value);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(search.length >= 2)}
+                    onBlur={() => {
+                      // Delay hiding suggestions to allow clicking on them
+                      setTimeout(() => setShowSuggestions(false), 200);
+                    }}
+                    autoFocus
+                  />
+                  
+                  {/* Suggestions Dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 bg-white border-2 border-lime-300 rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
+                      {suggestions.map((player, index) => {
+                        const playerName = player['Player Name'] || 'Unknown Player';
+                        return (
+                          <div
+                            key={index}
+                            className="px-4 py-2 hover:bg-lime-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onClick={() => handleSuggestionSelect(playerName)}
+                          >
+                            <div className="font-medium text-gray-800">{playerName}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1 overflow-y-auto max-h-48 mb-4 bg-gray-100 rounded-md p-2">
                   {playersLoading ? (
                     <div className="text-gray-500 text-center py-4">Loading players...</div>
@@ -497,27 +660,30 @@
                   ) : players.length === 0 ? (
                     <div className="text-gray-500 text-center py-4">No players found.</div>
                   ) : (
-                    players.map((p, i) => (
-                      <div
-                        key={i}
-                        className="flex flex-col gap-1 py-1 px-2 hover:bg-gray-200 rounded cursor-pointer"
-                        onClick={() => p.playerName && handlePlayerSelect(p.playerName)}
-                      >
-                        <span className="font-bold">{p.playerName || 'Unknown Player'}</span>
-                      </div>
-                    ))
+                    players.map((p, i) => {
+                      const playerName = p['Player Name'] || p.playerName || 'Unknown Player';
+                      return (
+                        <div
+                          key={i}
+                          className="flex flex-col gap-1 py-1 px-2 hover:bg-gray-200 rounded cursor-pointer"
+                          onClick={() => handlePlayerSelect(playerName)}
+                        >
+                          <span className="font-bold">{playerName}</span>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
                 {/* <div className="text-xs text-gray-500 mb-2">Player data was last updated on <b>5th Mar 2025</b></div> */}
                 <button
                   className="mt-2 bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); }}
+                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); }}
                 >
                   Cancel
                 </button>
                 <button
                   className="absolute top-2 right-4 text-2xl text-gray-400 hover:text-gray-700"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); }}
+                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); }}
                   aria-label="Close modal"
                 >
                   &times;

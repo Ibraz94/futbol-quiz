@@ -26,6 +26,9 @@ interface SelectedPlayer {
   readonly playerId: string;
   readonly playerName: string;
   readonly categoryName: string;
+  readonly matchCount: number;
+  readonly matchingCategories: string[];
+  readonly phase: number;
 }
 
 interface BingoGridResponse {
@@ -278,8 +281,7 @@ const BingoGame: React.FC = () => {
         setCurrentGrid(gridFromApi);
         setCellStatus({});
 
-        // Store the available players from backend
-        setAvailablePlayers(playersFromApi);
+        // Store the available players from backend (will be updated after randomization)
 
         // Log player distribution by category
         const playersByCategory = playersFromApi.reduce((acc, player) => {
@@ -290,19 +292,67 @@ const BingoGame: React.FC = () => {
           return acc;
         }, {} as Record<string, string[]>);
 
-        // Log detailed player distribution with names and counts
-        console.log('📋 DETAILED PLAYER DISTRIBUTION:');
-        console.log('═'.repeat(80));
-        Object.entries(playersByCategory).forEach(([category, players]) => {
-          console.log(`${category}: ${players.length} → [${players.join(', ')}]`);
-        });
-        console.log('═'.repeat(80));
-
-
         try {
           // Randomize the order of players for gameplay
           if (playersFromApi.length > 0) {
             const randomizedPlayers = [...playersFromApi].sort(() => Math.random() - 0.5);
+            
+            // Log player distribution by phase and match count (AFTER randomization)
+            console.log('🎯 PLAYER DISTRIBUTION BY PHASE AND MATCH COUNT (GAME ORDER):');
+            console.log('═'.repeat(80));
+            
+            // Separate Phase 1 and Phase 2 players
+            const phase1Players = randomizedPlayers.filter(player => player.phase === 1);
+            const phase2Players = randomizedPlayers.filter(player => player.phase === 2);
+            
+            console.log(`🎯 PHASE 1 PLAYERS (32 players - 2 per category):`);
+            const phase1ByCategory = phase1Players.reduce((acc, player) => {
+              if (!acc[player.categoryName]) {
+                acc[player.categoryName] = [];
+              }
+              acc[player.categoryName].push(player.playerName);
+              return acc;
+            }, {} as Record<string, string[]>);
+            
+            Object.entries(phase1ByCategory).forEach(([category, players]) => {
+              console.log(`  ${category}: [${players.join(', ')}]`);
+            });
+            
+            console.log(`🎯 PHASE 2 PLAYERS (10 players - distribution):`);
+            const phase2ByMatchCount = phase2Players.reduce((acc, player) => {
+              if (!acc[player.matchCount]) {
+                acc[player.matchCount] = [];
+              }
+              
+              // Format player with category info based on match count
+              let playerDisplay = player.playerName;
+              if (player.matchCount === 0) {
+                // For 0 matches, just show player name
+                playerDisplay = player.playerName;
+              } else if (player.matchCount === 1) {
+                // For 1 match, show player name and the single category
+                playerDisplay = `${player.playerName} (${player.categoryName})`;
+              } else {
+                // For 2+ matches, show player name and all matching categories
+                const categories = player.matchingCategories && player.matchingCategories.length > 0 
+                  ? player.matchingCategories.join(', ')
+                  : player.categoryName;
+                playerDisplay = `${player.playerName} (${categories})`;
+              }
+              
+              acc[player.matchCount].push(playerDisplay);
+              return acc;
+            }, {} as Record<number, string[]>);
+
+            Object.entries(phase2ByMatchCount).forEach(([matchCount, players]) => {
+              console.log(`  ${matchCount} matches (${players.length} players): [${players.join(', ')}]`);
+            });
+            
+            console.log('═'.repeat(80));
+            console.log(`Total players: ${randomizedPlayers.length} (Phase 1: ${phase1Players.length}, Phase 2: ${phase2Players.length})`);
+            
+            // Store the randomized players as available players (this is what the UI uses)
+            setAvailablePlayers(randomizedPlayers);
                     
             // Convert SelectedPlayer to Player format and set all 42 players
             const gamePlayersInOrder = randomizedPlayers.map((selectedPlayer, index) => ({
