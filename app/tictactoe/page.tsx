@@ -9,7 +9,15 @@
     function TictactoeGame() {
   const [topCategories, setTopCategories] = useState<{ name: string; slug: string; categoryId: number }[]>([]);
   const [leftCategories, setLeftCategories] = useState<{ name: string; slug: string; categoryId: number }[]>([]);
-  const [pairs, setPairs] = useState<{ categories: string[]; players: string[] }[]>([]);
+  const [pairs, setPairs] = useState<{ 
+    categories: string[]; 
+    players: string[];
+    playerJustifications?: Array<{
+      playerName: string;
+      categories: Array<{ categoryId: number; categoryName: string }>;
+      justification: string;
+    }>;
+  }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -21,6 +29,12 @@
   const [suggestions, setSuggestions] = useState<any[]>([]); // Real-time search suggestions
   const [showSuggestions, setShowSuggestions] = useState(false); // Show/hide suggestions dropdown
   const [activePair, setActivePair] = useState<string[] | null>(null);
+  const [activePairJustifications, setActivePairJustifications] = useState<Array<{
+    playerName: string;
+    categories: Array<{ categoryId: number; categoryName: string }>;
+    justification: string;
+  }> | null>(null);
+  const [showJustifications, setShowJustifications] = useState(false);
   const [player1Score, setPlayer1Score] = useState(0);
   const [player2Score, setPlayer2Score] = useState(0);
   const [player1Wins, setPlayer1Wins] = useState(0);
@@ -65,10 +79,12 @@
       }, []);
 
       useEffect(() => {
-        let gridLoaded = false;
-        let playersLoaded = false;
-
+        if (allPlayers.length === 0) return; // Don't load grid until players are loaded
+        
         console.log(`🎯 Loading TicTacToe grid for league: ${league}`);
+        setLoading(true);
+        setError(null);
+        
         axios.get(`${API_BASE_URL}/tictactoe/categories/grid?league=${league}`)
           .then(res => {
             setTopCategories(res.data.top);
@@ -107,18 +123,14 @@
             }
             
             setLoading(false);
-            gridLoaded = true;
-            if (playersLoaded) setDataReady(true);
+            setDataReady(true);
           })
           .catch(err => {
-            setError("Failed to load grid categories");
+            console.error('❌ Error loading grid categories:', err);
+            setError(`Failed to load grid categories: ${err.response?.data?.message || err.message}`);
             setLoading(false);
           });
-        
-        // Check if players are already loaded
-        playersLoaded = allPlayers.length > 0;
-        if (gridLoaded && playersLoaded) setDataReady(true);
-      }, [allPlayers]);
+      }, [league, allPlayers.length]); // Only depend on league and players count
 
       // Real-time suggestions as user types
       useEffect(() => {
@@ -275,9 +287,11 @@
         const pair = findPair(topCategories[col], leftCategories[row]);
         if (pair) {
           console.log('Valid answers for', topCategories[col].name, '+', leftCategories[row].name, ':', pair.players);
+          console.log('Player justifications:', pair.playerJustifications);
         }
         setModalOpen(true);
         setActivePair([topCategories[col].name, leftCategories[row].name]);
+        setActivePairJustifications(pair?.playerJustifications || null);
         setActiveCell({ row, col });
         setSearch(""); // Clear search when opening modal
         setShowSuggestions(false); // Hide suggestions when opening modal
@@ -345,7 +359,8 @@
             setLoading(false);
           })
           .catch(err => {
-            setError("Failed to load grid categories");
+            console.error('❌ Error loading grid categories in resetBoard:', err);
+            setError(`Failed to load grid categories: ${err.response?.data?.message || err.message}`);
             setLoading(false);
           });
       }
@@ -430,18 +445,22 @@
           setModalOpen(false);
           setSearch("");
           setActivePair(null);
+          setActivePairJustifications(null);
           setActiveCell(null);
           setShowSuggestions(false);
           setSuggestions([]);
+          setShowJustifications(false);
         } else {
           // Wrong answer: close modal and skip turn
           setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
           setModalOpen(false);
           setSearch("");
           setActivePair(null);
+          setActivePairJustifications(null);
           setActiveCell(null);
           setShowSuggestions(false);
           setSuggestions([]);
+          setShowJustifications(false);
         }
       }
 
@@ -456,9 +475,11 @@
           setModalOpen(false);
           setSearch("");
           setActivePair(null);
+          setActivePairJustifications(null);
           setActiveCell(null);
           setShowSuggestions(false);
           setSuggestions([]);
+          setShowJustifications(false);
         }
         // If not confirmed, do nothing (let user try again)
       }
@@ -677,13 +698,13 @@
                 {/* <div className="text-xs text-gray-500 mb-2">Player data was last updated on <b>5th Mar 2025</b></div> */}
                 <button
                   className="mt-2 bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); }}
+                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
                 >
                   Cancel
                 </button>
                 <button
                   className="absolute top-2 right-4 text-2xl text-gray-400 hover:text-gray-700"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); }}
+                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
                   aria-label="Close modal"
                 >
                   &times;
