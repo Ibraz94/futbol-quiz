@@ -1,194 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import axios from 'axios';
-import { API_BASE_URL } from "../../lib/config";
 import Image from 'next/image';
-
-// Enhanced type definitions for better type safety
-type CategoryType = 'nationalities' | 'trophies' | 'teams' | 'teammates' | 'leagues' | 'coaches';
-
-interface Category {
-  readonly _id: string;
-  readonly name: string;
-  readonly type: CategoryType;
-  readonly slug: string;
-}
-
-interface Player {
-  readonly _id: string;
-  readonly name: string;
-  readonly image?: string;
-  readonly categories: readonly Category[];
-}
-
-interface SelectedPlayer {
-  readonly playerId: string;
-  readonly playerName: string;
-  readonly categoryName: string;
-  readonly matchCount: number;
-  readonly matchingCategories: string[];
-  readonly phase: number;
-}
-
-interface BingoGridResponse {
-  readonly grid: readonly (readonly Category[])[];
-  readonly players: readonly SelectedPlayer[];
-}
-
-type CellStatus = 'default' | 'correct' | 'wrong';
-
-
-interface GameError {
-  readonly message: string;
-  readonly code?: string;
-  readonly timestamp: number;
-}
-
-// Type guards for runtime type checking (kept only if used)
-
-// Utility function for creating cell keys
-const createCellKey = (row: number, col: number): string => {
-  return `${row}-${col}`;
-};
-
-// Utility type for validating cell position
-const isValidCellPosition = (row: number, col: number): boolean => {
-  return row >= 0 && row < GAME_CONFIG.GRID_SIZE && col >= 0 && col < GAME_CONFIG.GRID_SIZE;
-};
-
-// Centralized game constants
-const GAME_CONFIG = {
-  MAX_PLAYERS: 42,
-  TIMER_DURATION: 10,
-  WRONG_ANSWER_PENALTY: 2,
-  CORRECT_ANSWER_PENALTY: 1,
-  CELL_RESET_DELAY: 1000,
-  WILDCARD_DELAY: 500,
-  GRID_SIZE: 4,
-  MAX_IMAGE_RETRY_ATTEMPTS: 2,
-} as const;
-
-const getCellClass = (status: CellStatus) => {
-  switch (status) {
-    case 'correct': return 'bg-green-500 text-white';
-    case 'wrong': return 'bg-red-500 text-white';
-    default: return 'bg-[#23243a] text-white/90 hover:ring-2 hover:ring-[#ffd60066] cursor-pointer';
-  }
-};
-
-// Optimized logo path function with lookup table and efficient normalization
-const getLogoPath = (slug: string): string | null => {
-  // Pre-computed lookup table for common cases (O(1) lookup)
-  const LOGO_LOOKUP: Record<string, string> = {
-    // Tottenham variations
-    'tottenham hotspur': 'tottenham-hotspur',
-    'tottenham-hotspur': 'tottenham-hotspur',
-    'tottenham': 'tottenham-hotspur',
-    
-    // Country variations
-    'portekiz': 'portekiz',
-    'çekya': 'cekiya',
-    'cekiya': 'cekiya',
-    'hırvatistan': 'hirvatistan',
-    'hirvatistan': 'hirvatistan',
-    'croatia': 'hirvatistan',
-    
-    // League variations
-    'i̇talya serie a': 'i̇talya-serie-a',
-    'italya-serie-a': 'i̇talya-serie-a',
-    'italya serie a': 'i̇talya-serie-a',
-    'italy serie a': 'i̇talya-serie-a',
-    'italy-serie-a': 'i̇talya-serie-a',
-    
-    'i̇ngiltere premier league': 'i̇ngiltere-premier-league',
-    'ingiltere-premier-league': 'i̇ngiltere-premier-league',
-    'ingiltere premier league': 'i̇ngiltere-premier-league',
-    'england premier league': 'i̇ngiltere-premier-league',
-    'england-premier-league': 'i̇ngiltere-premier-league',
-    
-    'avrupa şampiyonası': 'avrupa-şampiyonası',
-    'avrupa-şampiyonası': 'avrupa-şampiyonası',
-    'avrupa-sampiyonasi': 'avrupa-şampiyonası',
-    
-    'süper lig': 'süper-lig',
-    'süper-lig': 'süper-lig',
-    'super-lig': 'süper-lig',
-    
-    'dünya kupası': 'dünya-kupası',
-    'dünya-kupası': 'dünya-kupası',
-    'dunya-kupasi': 'dünya-kupası',
-    
-    'afrika kupası': 'afrika-kupası',
-    'afrika-kupası': 'afrika-kupası',
-    'afrika-kupasi': 'afrika-kupası',
-    
-    'uefa şampiyonlar ligi': 'laliga', // Fallback to La Liga
-    'uefa-şampiyonlar-ligi': 'laliga',
-    'uefa-sampiyonlar-ligi': 'laliga',
-    'champions league': 'laliga',
-    'champions-league': 'laliga',
-    
-    'i̇spanya laliga': 'i̇spanya-laliga',
-    'ispanya-laliga': 'i̇spanya-laliga',
-    'spain laliga': 'i̇spanya-laliga',
-    'spain-laliga': 'i̇spanya-laliga',
-    
-    'fildişi sahili': 'fildişi-sahili',
-    'fildişi-sahili': 'fildişi-sahili',
-    'fildisi-sahili': 'fildişi-sahili',
-    'ivory coast': 'fildişi-sahili',
-    'ivory-coast': 'fildişi-sahili',
-    
-    'bayer 04 leverkusen': 'bayer-leverkusen',
-    'bayer-04-leverkusen': 'bayer-leverkusen',
-    
-    'edin visca': 'edin-visca',
-    'edin-visca': 'edin-visca',
-  };
-
-  // Fast normalization function with optimized regex
-  const normalizeSlug = (input: string): string => {
-    return input.toLowerCase()
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/[ığüşöçİĞÜŞÖÇ]/g, (match) => {
-        const turkishToLatin: Record<string, string> = {
-          'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c',
-          'İ': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'
-        };
-        return turkishToLatin[match] || match;
-      })
-      .replace(/[^a-z0-9-]/g, '') // Remove special characters except hyphens
-      .replace(/-+/g, '-') // Replace multiple hyphens with single
-      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-  };
-
-  // Fast lookup in pre-computed table
-  const normalizedInput = normalizeSlug(slug);
-  const directMatch = LOGO_LOOKUP[normalizedInput];
-  if (directMatch) {
-    return `/bingo_game_logos/${directMatch}.png`;
-  }
-
-  // Check for partial matches in lookup table (fallback)
-  for (const [key, value] of Object.entries(LOGO_LOOKUP)) {
-    if (normalizedInput.includes(key) || key.includes(normalizedInput)) {
-      return `/bingo_game_logos/${value}.png`;
-    }
-  }
-
-  // Handle Turkish characters efficiently
-  const hasTurkishChars = /[ığüşöçİĞÜŞÖÇ]/.test(slug);
-  if (hasTurkishChars) {
-    return `/bingo_game_logos/${normalizedInput}.png`;
-  }
-
-  // Final fallback
-  return normalizedInput ? `/bingo_game_logos/${normalizedInput}.png` : null;
-};
+import { API_BASE_URL } from "../../lib/config";
+import { GAME_CONFIG } from '../../lib/bingo-config';
+import { Category, Player, SelectedPlayer, BingoGridResponse, CellStatus, GameError } from '../../lib/bingo-types';
+import { createCellKey, isValidCellPosition, getCellClass, getLogoPath } from '../../lib/bingo-utils';
+import { bingoState } from '../../lib/bingo-state';
 
 const BingoGame: React.FC = () => {
-  // Enhanced state with proper typing
+  // Core game state
   const [players, setPlayers] = useState<readonly Player[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentGrid, setCurrentGrid] = useState<readonly (readonly Category[])[]>([]);
@@ -203,31 +25,27 @@ const BingoGame: React.FC = () => {
   const [availablePlayers, setAvailablePlayers] = useState<readonly SelectedPlayer[]>([]);
   const [gameEnded, setGameEnded] = useState<boolean>(false);
   const [gameError, setGameError] = useState<GameError | null>(null);
+  const [aNamePercentage, setANamePercentage] = useState<string>('');
 
+  // Refs
+  const timerTriggeredRef = useRef(false);
   const currentPlayer = players[currentIndex];
-  const timerTriggeredRef = React.useRef(false);
 
-  // Memoized logo path function with stable cache
-  const getMemoizedLogoPath = React.useMemo(() => {
+  // Memoized logo path function
+  const getMemoizedLogoPath = useMemo(() => {
     const cache = new Map<string, string | null>();
-    
     return (slug: string): string | null => {
-      if (cache.has(slug)) {
-        return cache.get(slug)!;
-      }
-      
+      if (cache.has(slug)) return cache.get(slug)!;
       const path = getLogoPath(slug);
       cache.set(slug, path);
       return path;
     };
-  }, []); // No dependencies = stable function
+  }, []);
 
   const handlePlayWildcard = () => {
     if (gameEnded || wildcardUsed || !currentGrid.length) return;
     if (intervalId) clearInterval(intervalId);
     timerTriggeredRef.current = true;
-
-    setGridLoading(true);
 
     const updatedStatus = { ...cellStatus };
     const newLockedCells = new Set(lockedCells);
@@ -254,162 +72,132 @@ const BingoGame: React.FC = () => {
     setLockedCells(newLockedCells);
     setWildcardUsed(true);
 
-    console.log(`🃏 Wildcard used! Locked ${lockedCount} cells for current player "${currentPlayer?.name}"`);
-
     // Move to next player from available players
     setTimeout(() => {
       const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
-      
-      if (!hasNextPlayer) {
-        console.log('🎉 All players used! Game should end soon...');
-      }
-      
-      setGridLoading(false);
     }, GAME_CONFIG.WILDCARD_DELAY); // Small delay to show the wildcard effect
+  };
+
+  // Simplified data fetching
+  const setupGameData = (data: BingoGridResponse) => {
+    const { grid: gridFromApi, players: playersFromApi } = data;
+    
+    // Calculate A-name percentage
+    const playersWithANames = playersFromApi.filter(player => 
+      player.playerName && player.playerName.charAt(0).toUpperCase() === 'A'
+    );
+    const percentageA = ((playersWithANames.length / playersFromApi.length) * 100).toFixed(1);
+    setANamePercentage(percentageA);
+    
+    console.log(`📊 PLAYER DISTRIBUTION ANALYSIS:`);
+    console.log(`   Total players: ${playersFromApi.length}`);
+    console.log(`   Players with 'A' names: ${playersWithANames.length}`);
+    console.log(`   Percentage with 'A' names: ${percentageA}%`);
+    console.log(`   'A' name players: ${playersWithANames.map(p => p.playerName).join(', ')}`);
+
+    // Set grid and reset cell status
+    setCurrentGrid(gridFromApi);
+    setCellStatus({});
+
+    if (playersFromApi.length > 0) {
+      // Randomize players
+      const randomizedPlayers = [...playersFromApi].sort(() => Math.random() - 0.5);
+      setAvailablePlayers(randomizedPlayers);
+      
+      // Convert to game format
+      const gamePlayers = randomizedPlayers.map(selectedPlayer => ({
+        _id: selectedPlayer.playerId,
+        name: selectedPlayer.playerName,
+        categories: [],
+      }));
+      setPlayers(gamePlayers);
+      
+      // Setup first player
+      const firstPlayer = randomizedPlayers[0];
+      const firstPlayerCategories = firstPlayer.matchingCategories?.length > 0 
+        ? firstPlayer.matchingCategories.map(cat => ({ id: cat, name: cat }))
+        : [{ id: firstPlayer.categoryName || 'No matches', name: firstPlayer.categoryName || 'No matches' }];
+      
+      setCorrectCategories(firstPlayerCategories);
+      setCurrentIndex(0);
+      
+      // Log first player
+      const firstPlayerAnswer = firstPlayer.matchingCategories?.length > 0 
+        ? firstPlayer.matchingCategories.join(', ')
+        : firstPlayer.categoryName || 'No matches';
+      console.log(`🎮 Player 1: ${firstPlayer.playerName} → ${firstPlayerAnswer}`);
+    } else {
+      setGameError({
+        message: 'No players available from server',
+        code: 'NO_PLAYERS',
+        timestamp: Date.now()
+      });
+    }
   };
 
   useEffect(() => {
     const fetchGrid = async () => {
+      // Use cached result if available
+      if (bingoState.hasLastResult) {
+        setGridLoading(true);
+        try {
+          setupGameData(bingoState.lastSuccessfulResult!);
+        } finally {
+          setGridLoading(false);
+        }
+        return;
+      }
+
+      // Subscribe to in-flight request if available
+      if (bingoState.currentInFlightPromise) {
+        setGridLoading(true);
+        try {
+          const data = await bingoState.currentInFlightPromise;
+          setupGameData(data);
+        } catch (err: any) {
+          console.error('Failed to subscribe to in-flight request:', err);
+          setGameError({ message: 'Failed to load game data', code: 'LOAD_ERROR', timestamp: Date.now() });
+          bingoState.failRequest();
+        } finally {
+          setGridLoading(false);
+        }
+        return;
+      }
+
+      // Start new request
       try {
         setGridLoading(true);
+        const abortController = new AbortController();
+        bingoState.startRequest(abortController);
 
-        // Fetch both grid and players from the new API
-        const res = await axios.get<BingoGridResponse>(`${API_BASE_URL}/bingo/balanced-grid`);
-        const { grid: gridFromApi, players: playersFromApi } = res.data;
+        const promise = axios.get<BingoGridResponse>(`${API_BASE_URL}/bingo/custom-bingo`, {
+          timeout: 240000,
+          signal: abortController.signal,
+        }).then(res => res.data);
 
-        // Set the grid
-        setCurrentGrid(gridFromApi);
-        setCellStatus({});
-
-        // Store the available players from backend (will be updated after randomization)
-
-        // Log player distribution by category
-        const playersByCategory = playersFromApi.reduce((acc, player) => {
-          if (!acc[player.categoryName]) {
-            acc[player.categoryName] = [];
-          }
-          acc[player.categoryName].push(player.playerName);
-          return acc;
-        }, {} as Record<string, string[]>);
-
-        try {
-          // Randomize the order of players for gameplay
-          if (playersFromApi.length > 0) {
-            const randomizedPlayers = [...playersFromApi].sort(() => Math.random() - 0.5);
-            
-            // Log player distribution by phase and match count (AFTER randomization)
-            console.log('🎯 PLAYER DISTRIBUTION BY PHASE AND MATCH COUNT (GAME ORDER):');
-            console.log('═'.repeat(80));
-            
-            // Separate Phase 1 and Phase 2 players
-            const phase1Players = randomizedPlayers.filter(player => player.phase === 1);
-            const phase2Players = randomizedPlayers.filter(player => player.phase === 2);
-            
-            console.log(`🎯 PHASE 1 PLAYERS (32 players - 2 per category):`);
-            const phase1ByCategory = phase1Players.reduce((acc, player) => {
-              if (!acc[player.categoryName]) {
-                acc[player.categoryName] = [];
-              }
-              acc[player.categoryName].push(player.playerName);
-              return acc;
-            }, {} as Record<string, string[]>);
-            
-            Object.entries(phase1ByCategory).forEach(([category, players]) => {
-              console.log(`  ${category}: [${players.join(', ')}]`);
-            });
-            
-            console.log(`🎯 PHASE 2 PLAYERS (10 players - distribution):`);
-            const phase2ByMatchCount = phase2Players.reduce((acc, player) => {
-              if (!acc[player.matchCount]) {
-                acc[player.matchCount] = [];
-              }
-              
-              // Format player with category info based on match count
-              let playerDisplay = player.playerName;
-              if (player.matchCount === 0) {
-                // For 0 matches, just show player name
-                playerDisplay = player.playerName;
-              } else if (player.matchCount === 1) {
-                // For 1 match, show player name and the single category
-                playerDisplay = `${player.playerName} (${player.categoryName})`;
-              } else {
-                // For 2+ matches, show player name and all matching categories
-                const categories = player.matchingCategories && player.matchingCategories.length > 0 
-                  ? player.matchingCategories.join(', ')
-                  : player.categoryName;
-                playerDisplay = `${player.playerName} (${categories})`;
-              }
-              
-              acc[player.matchCount].push(playerDisplay);
-              return acc;
-            }, {} as Record<number, string[]>);
-
-            Object.entries(phase2ByMatchCount).forEach(([matchCount, players]) => {
-              console.log(`  ${matchCount} matches (${players.length} players): [${players.join(', ')}]`);
-            });
-            
-            console.log('═'.repeat(80));
-            console.log(`Total players: ${randomizedPlayers.length} (Phase 1: ${phase1Players.length}, Phase 2: ${phase2Players.length})`);
-            
-            // Store the randomized players as available players (this is what the UI uses)
-            setAvailablePlayers(randomizedPlayers);
-                    
-            // Convert SelectedPlayer to Player format and set all 42 players
-            const gamePlayersInOrder = randomizedPlayers.map((selectedPlayer, index) => ({
-              _id: selectedPlayer.playerId,
-              name: selectedPlayer.playerName,
-              categories: [], // We don't need categories for display
-            }));
-            
-            setPlayers(gamePlayersInOrder);
-            
-            // Set up the first player's matching categories
-            const firstPlayer = randomizedPlayers[0];
-            const firstPlayerCategories = [{ id: firstPlayer.categoryName, name: firstPlayer.categoryName }];
-            
-            setCorrectCategories(firstPlayerCategories);
-            setCurrentIndex(0); // Start with first player
-            
-            console.log(`🎯 Game Started - Player 1: ${firstPlayer.playerName} ✅ Correct Category: "${firstPlayer.categoryName}"`);                        
-          } else {
-            // No players available from backend
-            console.error('❌ No players available from backend');
-            setGameError({
-              message: 'No players available from server',
-              code: 'NO_PLAYERS',
-              timestamp: Date.now()
-            });
-            setPlayers([]);
-            setCorrectCategories([]);
-          }
-        } catch (err) {
-          console.error('Failed to setup players:', err);
-          setGameError({
-            message: 'Failed to setup players',
-            code: 'SETUP_ERROR',
-            timestamp: Date.now()
-          });
-          setPlayers([]);
-          setCorrectCategories([]);
-        }
-      } catch (err) {
-        console.error('Failed to load balanced grid:', err);
-        setGameError({
-          message: 'Failed to load game data',
-          code: 'LOAD_ERROR',
-          timestamp: Date.now()
-        });
+        bingoState.setInFlightPromise(promise);
+        const data = await promise;
+        bingoState.completeRequest(data);
+        setupGameData(data);
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') return;
+        
+        console.error('Failed to load game data:', err);
+        setGameError({ message: 'Failed to load game data', code: 'LOAD_ERROR', timestamp: Date.now() });
+        bingoState.failRequest();
       } finally {
         setGridLoading(false);
       }
     };
 
     fetchGrid();
+    
+    return () => {
+      if (process.env.NODE_ENV === 'production') {
+        bingoState.abort();
+      }
+    };
   }, []);
-
-
-  // No longer needed - we get all players from the grid API
-  // const fetchMatchingPlayer = removed
 
   useEffect(() => {
     // Skip timer setup if no current player
@@ -461,15 +249,19 @@ const BingoGame: React.FC = () => {
         return false;
       }
       
-      const nextPlayerCategories: readonly { readonly id: string; readonly name: string }[] = [
-        { id: nextSelectedPlayer.categoryName, name: nextSelectedPlayer.categoryName }
-      ];
+      const nextPlayerCategories: readonly { readonly id: string; readonly name: string }[] = 
+        nextSelectedPlayer.matchingCategories && nextSelectedPlayer.matchingCategories.length > 0 
+          ? nextSelectedPlayer.matchingCategories.map(cat => ({ id: cat, name: cat }))
+          : [{ id: nextSelectedPlayer.categoryName || 'No matches', name: nextSelectedPlayer.categoryName || 'No matches' }];
       
-      // Log the next player details
-      console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} ✅ Correct Category: "${nextSelectedPlayer.categoryName}"`);
-            
       setCorrectCategories(nextPlayerCategories);
       setCurrentIndex(nextIndex);
+      
+      // Log the current player's answer
+      const categories = nextSelectedPlayer.matchingCategories && nextSelectedPlayer.matchingCategories.length > 0 
+        ? nextSelectedPlayer.matchingCategories.join(', ')
+        : nextSelectedPlayer.categoryName || 'No matches';
+      console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} → ${categories}`);
       
       return true;
     }
@@ -497,48 +289,37 @@ const BingoGame: React.FC = () => {
       setCellStatus(updatedStatus);
       setLockedCells(prev => new Set(prev).add(key));
 
-      console.log(`✅ MATCH FOUND! Player "${currentPlayer?.name}" correctly matched category "${cell.name}"`);
-      
-      
+      console.log(`✅ CORRECT! Player "${currentPlayer?.name}" matched "${cell.name}"`);
       // Move to next player from available players
-      const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
-      
-      if (!hasNextPlayer) {
-        console.log('🎯 GAME ENDED! All players exhausted after correct match');
-      }  
+      const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);  
     } else {
       updatedStatus[key] = 'wrong';
       setCellStatus(updatedStatus);
       
-      console.log(`❌ WRONG MATCH! Player "${currentPlayer?.name}" incorrectly selected "${cell.name}" (expected: "${correctCategories[0]?.name}")`);
+      console.log(`❌ WRONG! Player "${currentPlayer?.name}" selected "${cell.name}" (expected: ${correctCategories.map(c => c.name).join(', ')})`);
       
       setTimeout(() => {
         setCellStatus(prev => ({ ...prev, [key]: 'default' }));
       }, GAME_CONFIG.CELL_RESET_DELAY);
-
-      
       // Move to next player from available players (skip current + 1 more for wrong answer)
       // For wrong answers, we need to skip 2 players total (current + 1 additional)
       const nextIndex = currentIndex + GAME_CONFIG.WRONG_ANSWER_PENALTY; // Skip players for wrong answer
       
       // Check if this wrong answer ends the game
       if (currentIndex >= availablePlayers.length - 1) {
-        console.log('🎯 GAME ENDED! Last player made wrong selection - no more players available');
         setGameEnded(true);
         return; // End the game immediately
       }
       
       if (nextIndex < availablePlayers.length) {
         const nextSelectedPlayer = availablePlayers[nextIndex];
-        const nextPlayerCategories = [{ id: nextSelectedPlayer.categoryName, name: nextSelectedPlayer.categoryName }];
-        
-        console.log(`⚠️ Wrong answer penalty: Skipping 2 players (from ${currentIndex + 1} to ${nextIndex + 1})`);
-        console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} ✅ Correct Category: "${nextSelectedPlayer.categoryName}"`);
+        const nextPlayerCategories = nextSelectedPlayer.matchingCategories && nextSelectedPlayer.matchingCategories.length > 0 
+          ? nextSelectedPlayer.matchingCategories.map(cat => ({ id: cat, name: cat }))
+          : [{ id: nextSelectedPlayer.categoryName || 'No matches', name: nextSelectedPlayer.categoryName || 'No matches' }];
         
         setCorrectCategories(nextPlayerCategories);
         setCurrentIndex(nextIndex);
       } else {
-        console.log('🎯 GAME ENDED! Wrong answer penalty would exceed available players');
         setGameEnded(true);
         return; // End the game immediately
       }
@@ -550,20 +331,24 @@ const BingoGame: React.FC = () => {
     timerTriggeredRef.current = true;
     if (intervalId) clearInterval(intervalId);
     
-    // Move to next player from available players
-    const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
-    
-    if (!hasNextPlayer) {
-      console.log('🎯 GAME ENDED! All players exhausted after skip');
+    // If this is the last player, end the game immediately
+    if (currentIndex >= availablePlayers.length - 1) {
+      setCurrentIndex(availablePlayers.length); // Move index beyond last to satisfy end condition
+      setGameEnded(true);
+      return;
     }
+
+    // Otherwise move to next player from available players
+    const hasNextPlayer = getNextPlayerFromAvailable(currentIndex);
   };
 
   const startNewGame = (): void => {
     if (intervalId) clearInterval(intervalId);
     timerTriggeredRef.current = true;
     setLockedCells(new Set());
-    setFailedImageAttempts({}); // Reset failed image attempts
-    setGameError(null); // Reset error state
+    setFailedImageAttempts({});
+    setGameError(null);
+    bingoState.reset();
     window.location.reload();
   };
 
@@ -608,18 +393,6 @@ const BingoGame: React.FC = () => {
   if (shouldEndGame) {
     if (intervalId) clearInterval(intervalId);
     
-    // Log game end reason
-    if (gameEnded) {
-      console.log('🎯 GAME ENDED! Game ended due to player exhaustion or penalty.');
-    } else if (allCellsLocked) {
-      console.log('🏆 GAME WON! All cells are locked!');
-    } else if (currentIndex >= availablePlayers.length) {
-      console.log('🎯 GAME ENDED! All players have been used or exhausted.');
-    } else if (!currentPlayer) {
-      console.log('❓ GAME ENDED! No current player available.');
-    } else {
-      console.log('❓ GAME ENDED! Unknown reason.');
-    }
     
     return (
       <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4">
@@ -641,7 +414,12 @@ const BingoGame: React.FC = () => {
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6 relative">
       {gridLoading && (
         <div className="absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
-          <div className="text-white font-semibold text-lg animate-pulse">Loading player grid…</div>
+          <div className="text-center">
+            <div className="text-white font-semibold text-lg animate-pulse mb-2">Generating game...</div>
+            <div className="text-white/70 text-sm">This may take up to 3 minutes</div>
+            <div className="text-white/50 text-xs mt-1">Please wait while we select the perfect players</div>
+            <div className="text-green-400 text-xs mt-2">🛡️ Single API call protection active</div>
+          </div>
         </div>
       )}
 
@@ -690,9 +468,9 @@ const BingoGame: React.FC = () => {
                     className={`${getCellClass(cellStatus[key] ?? 'default')} text-xs font-medium leading-tight flex flex-col items-center justify-center text-center w-38 h-16 rounded transition-all duration-200 p-1`}
                     onClick={() => handleCellClick(cat, rowIndex, colIndex)}
                   >
-                    {cellStatus[key] === 'correct' ? (
+                    {/* {cellStatus[key] === 'correct' ? (
                       '🔒'
-                    ) : (
+                    ) : ( */}
                       <>
                         {logoPath && (!failedImageAttempts[logoPath] || failedImageAttempts[logoPath] < GAME_CONFIG.MAX_IMAGE_RETRY_ATTEMPTS) ? (
                           <Image
@@ -724,7 +502,7 @@ const BingoGame: React.FC = () => {
 
                         <span className="text-[10px] leading-tight">{cat.name}</span>
                       </>
-                    )}
+                    {/* )} */}
                   </div>
                 );
               })}
