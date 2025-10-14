@@ -170,7 +170,7 @@ const BingoGame: React.FC = () => {
         const abortController = new AbortController();
         bingoState.startRequest(abortController);
 
-        const promise = axios.get<BingoGridResponse>(`${API_BASE_URL}/bingo/custom-bingo`, {
+        const promise = axios.get<BingoGridResponse>(`${API_BASE_URL}/bingo/alternative-bingo`, {
           timeout: 240000,
           signal: abortController.signal,
         }).then(res => res.data);
@@ -319,6 +319,12 @@ const BingoGame: React.FC = () => {
         
         setCorrectCategories(nextPlayerCategories);
         setCurrentIndex(nextIndex);
+        
+        // Log the next player's correct answer
+        const categories = nextSelectedPlayer.matchingCategories && nextSelectedPlayer.matchingCategories.length > 0 
+          ? nextSelectedPlayer.matchingCategories.join(', ')
+          : nextSelectedPlayer.categoryName || 'No matches';
+        console.log(`🎮 Player ${nextIndex + 1}: ${nextSelectedPlayer.playerName} → ${categories}`);
       } else {
         setGameEnded(true);
         return; // End the game immediately
