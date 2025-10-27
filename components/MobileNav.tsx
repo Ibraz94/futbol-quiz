@@ -16,8 +16,8 @@ const links = [
   //   path: ""
   // },
   {
-    name: 'Games',
-    path: ""
+    name: 'Bingo',
+    path: "/bingogame"
   },
   // {
   //   name: 'Live',

@@ -13,8 +13,8 @@ const links = [
   //   path: ""
   // },
   {
-    name: 'GAMES',
-    path: ""
+    name: 'BINGO',
+    path: "/bingogame"
   },
   // {
   //   name: 'LIVE',
