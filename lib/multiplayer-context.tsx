@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL } from './config';
+import { WS_BASE_URL } from './config';
 
 export interface Player {
   userId: string;
@@ -149,7 +149,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     
     isConnectingRef.current = true;
     console.log('🔌 Connecting to multiplayer server with authentication...');
-    const newSocket = io(`${API_BASE_URL}/bingo-multiplayer`, {
+    const newSocket = io(`${WS_BASE_URL}/bingo-multiplayer`, {
       transports: ['websocket'],
       timeout: 20000,
       auth: {
@@ -157,7 +157,11 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       },
       extraHeaders: {
         Authorization: `Bearer ${token}`
-      }
+      },
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
     });
 
     newSocket.on('connect', () => {
