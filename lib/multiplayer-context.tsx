@@ -363,7 +363,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     });
 
     newSocket.on('turnTimeout', (data) => {
-      console.log(`⏰ Turn timeout for ${data.username}. Penalty: ${data.penalty} players, Consecutive timeouts: ${data.consecutiveTimeouts}`);
+      // console.log(`⏰ Turn timeout for ${data.username}. Penalty: ${data.penalty} players, Consecutive timeouts: ${data.consecutiveTimeouts}`);
       // You can add a callback here to show timeout notifications in the UI
       setCurrentRoom(prevRoom => prevRoom ? data.room : null);
     });
@@ -376,7 +376,6 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
 
     // Handle timer updates
     newSocket.on('timerUpdate', (data) => {
-      console.log('⏰ Timer update:', data.timeRemaining, 'seconds remaining');
       setCurrentRoom(prevRoom => prevRoom ? data.room : null);
     });
 

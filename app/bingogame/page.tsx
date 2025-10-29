@@ -231,7 +231,6 @@ const BingoGame: React.FC = () => {
     if (!isMultiplayer || !multiplayer.socket) return;
 
     const handleTimerUpdate = (data: { timeRemaining: number; room: any }) => {
-      console.log('⏰ Received timer update:', data.timeRemaining);
       setCountdownTimer(data.timeRemaining);
     };
 
