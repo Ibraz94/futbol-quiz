@@ -8,16 +8,26 @@ import "swiper/css";
 import "swiper/css/autoplay";
 import Image from 'next/image';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
 const featuredGames = [
   {
     image: "/bingo.png",
+    title: "Bingo Multiplayer",
+    description: "Play bingo with friends",
+    link: "/bingogame"
   },
   {
     image: "/guess-player.png",
+    title: "Quiz Multiplayer",
+    description: "Guess the football player",
+    link: "/quizgame"
   },
   {
     image: "/tiktak.png",
+    title: "Tic Tac Toe",
+    description: "Classic tic tac toe game",
+    link: "/tictactoe"
   },
 ];
 
@@ -136,36 +146,52 @@ export default function Games() {
           }}>
           {featuredGames.map((game, index) => (
             <SwiperSlide key={index} className="!flex !justify-center">
-              <motion.div
-                initial={{ 
-                  opacity: 0, 
-                  x: index === 0 ? -100 : index === 2 ? 100 : 0,
-                  y: index === 1 ? 100 : 0 
-                }}
-                animate={isInView ? { 
-                  opacity: 1, 
-                  x: 0,
-                  y: 0
-                } : { 
-                  opacity: 0, 
-                  x: index === 0 ? -100 : index === 2 ? 100 : 0,
-                  y: index === 1 ? 100 : 0 
-                }}
-                transition={{ 
-                  duration: 0.8, 
-                  delay: index * 0.2,
-                  ease: "easeOut" 
-                }}
-                className='w-full max-w-[280px] h-[300px] sm:max-w-[320px] sm:h-[340px] md:max-w-[350px] md:h-[370px] lg:max-w-[380px] lg:h-[400px] xl:h-[410px] rounded-[15px] sm:rounded-[18px] md:rounded-[20px] flex justify-center items-center bg-pink-50/20 overflow-hidden mx-auto'
-              >
-                <Image 
-                  src={game.image} 
-                  alt="game" 
-                  width={400} 
-                  height={400} 
-                  className="w-full h-full object-cover rounded-[15px] sm:rounded-[18px] md:rounded-[20px]"
-                />
-              </motion.div>
+              <Link href={game.link}>
+                <motion.div
+                  initial={{ 
+                    opacity: 0, 
+                    x: index === 0 ? -100 : index === 2 ? 100 : 0,
+                    y: index === 1 ? 100 : 0 
+                  }}
+                  animate={isInView ? { 
+                    opacity: 1, 
+                    x: 0,
+                    y: 0
+                  } : { 
+                    opacity: 0, 
+                    x: index === 0 ? -100 : index === 2 ? 100 : 0,
+                    y: index === 1 ? 100 : 0 
+                  }}
+                  transition={{ 
+                    duration: 0.8, 
+                    delay: index * 0.2,
+                    ease: "easeOut" 
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  className='w-full max-w-[280px] h-[300px] sm:max-w-[320px] sm:h-[340px] md:max-w-[350px] md:h-[370px] lg:max-w-[380px] lg:h-[400px] xl:h-[410px] rounded-[15px] sm:rounded-[18px] md:rounded-[20px] flex flex-col justify-center items-center bg-pink-50/20 overflow-hidden mx-auto cursor-pointer group relative'
+                >
+                  <Image 
+                    src={game.image} 
+                    alt="game" 
+                    width={400} 
+                    height={400} 
+                    className="w-full h-full object-cover rounded-[15px] sm:rounded-[18px] md:rounded-[20px]"
+                  />
+                  
+                  {/* Overlay with game info */}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-center items-center text-white p-4 rounded-[15px] sm:rounded-[18px] md:rounded-[20px]">
+                    <h3 className="text-lg sm:text-xl md:text-2xl font-bold mb-2 text-center">
+                      {game.title}
+                    </h3>
+                    <p className="text-sm sm:text-base text-center text-gray-200 mb-4">
+                      {game.description}
+                    </p>
+                    <div className="bg-white/20 px-4 py-2 rounded-full text-sm font-medium">
+                      Play Now
+                    </div>
+                  </div>
+                </motion.div>
+              </Link>
             </SwiperSlide>
           ))}
 

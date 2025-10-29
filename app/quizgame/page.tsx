@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { API_BASE_URL } from "../../lib/config";
+import { useMultiplayer, MultiplayerProvider } from '../../lib/multiplayer-context';
 
 type CareerEntry = {
   team: string;
@@ -17,7 +18,42 @@ type Player = {
   career: CareerEntry[];
 };
 
+interface QuizGameState {
+  players: Player[];
+  currentPlayerIndex: number;
+  currentQuestion: Player | null;
+  gamePhase: 'lobby' | 'playing' | 'finished';
+  scores: Record<string, number>;
+  series: Record<string, number>;
+  timer: number;
+  gameStartTime?: Date;
+  endTime?: Date;
+  winner?: string;
+}
+
 const QuizGame: React.FC = () => {
+  // Check authentication status
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authChecked, setAuthChecked] = useState<boolean>(false);
+
+  // Multiplayer context
+  const multiplayer = useMultiplayer();
+  const { 
+    isConnected, 
+    currentRoom, 
+    currentUserId, 
+    currentUsername, 
+    error: multiplayerError,
+    joinLobby, 
+    leaveRoom, 
+    toggleReady, 
+    startGame,
+    submitAnswer: multiplayerSubmitAnswer,
+    skipQuestion: multiplayerSkipQuestion,
+    resetGame: multiplayerResetGame
+  } = multiplayer;
+
+  // Game state
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [input, setInput] = useState('');
@@ -25,29 +61,133 @@ const QuizGame: React.FC = () => {
   const [series, setSeries] = useState(0);
   const [timer, setTimer] = useState(20);
   const [showGameOver, setShowGameOver] = useState(false);
+  const [isStartingGame, setIsStartingGame] = useState<boolean>(false);
+  const [isResettingGame, setIsResettingGame] = useState<boolean>(false);
+  const [isLeavingRoom, setIsLeavingRoom] = useState<boolean>(false);
+  const [isStartingNewGameFromWinner, setIsStartingNewGameFromWinner] = useState<boolean>(false);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const fetchPlayers = async () => {
+  // Check authentication on component mount
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    setIsAuthenticated(!!token);
+    setAuthChecked(true);
+  }, []);
+
+  // Listen for authentication changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('access_token');
+      setIsAuthenticated(!!token);
+      if (!token && currentRoom) {
+        leaveRoom();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [currentRoom, leaveRoom]);
+
+  // Get user ID from JWT token
+  const getUserIdFromToken = (): string | null => {
     try {
-      const res = await axios.get<Player[]>(`${API_BASE_URL}/career/game`);
-      setPlayers(res.data);
-      setScore(0);
-      setSeries(0);
-      setCurrentIndex(0);
-      setInput('');
-      setTimer(20);
-      if (res.data[0]) console.log('🔍 First answer is:', res.data[0].name);
-    } catch (err) {
-      console.error('Failed to fetch career data', err);
+      const token = localStorage.getItem('access_token');
+      if (!token) return null;
+      
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub || null;
+    } catch (error) {
+      console.error('Error decoding JWT token:', error);
+      return null;
     }
   };
 
+  const authenticatedUserId = getUserIdFromToken();
+  const [inputUsername, setInputUsername] = useState<string>(authenticatedUserId || '');
+
+  // Sync multiplayer state with local state
   useEffect(() => {
-    fetchPlayers();
-  }, []);
+    if (currentRoom?.gameState) {
+      const gameState = currentRoom.gameState as QuizGameState;
+      
+      // Update players if available
+      if (gameState.players && gameState.players.length > 0) {
+        setPlayers(gameState.players);
+      }
+      
+      // Update current player index
+      if (gameState.currentPlayerIndex !== undefined) {
+        setCurrentIndex(gameState.currentPlayerIndex);
+      }
+      
+      // Update scores if available
+      if (gameState.scores && currentUserId && gameState.scores[currentUserId] !== undefined) {
+        setScore(gameState.scores[currentUserId]);
+      }
+      
+      // Update series if available
+      if (gameState.series && currentUserId && gameState.series[currentUserId] !== undefined) {
+        setSeries(gameState.series[currentUserId]);
+      }
+      
+      // Update timer if available
+      if (gameState.timer !== undefined) {
+        setTimer(gameState.timer);
+      }
+      
+      // Update game ended state
+      if (currentRoom.status === 'finished') {
+        setShowGameOver(true);
+      }
+    }
+  }, [currentRoom?.gameState, currentRoom?.status, currentUserId]);
+
+  // Reset loading state when game actually starts
+  useEffect(() => {
+    if (currentRoom?.status === 'playing' && currentRoom?.gameState?.players) {
+      setIsStartingGame(false);
+    }
+  }, [currentRoom?.status, currentRoom?.gameState?.players]);
+
+  // Timer management: sync from server when playing
+  useEffect(() => {
+    if (currentRoom?.status === 'playing' && currentRoom?.gameState) {
+      const gameState = currentRoom.gameState as any;
+      if (typeof gameState.timer === 'number') {
+        setTimer(gameState.timer);
+      }
+    }
+  }, [currentRoom?.status, currentRoom?.gameState, (currentRoom?.gameState as any)?.timer]);
+
+  // Log correct answer for current question (for testing)
+  useEffect(() => {
+    if (currentRoom?.status === 'playing' && currentRoom?.gameState) {
+      const gs = currentRoom.gameState as any;
+      const idx = typeof gs.currentPlayerIndex === 'number' ? gs.currentPlayerIndex : 0;
+      const currentQ = Array.isArray(gs.players) ? gs.players[idx] : undefined;
+      if (currentQ?.name) {
+        console.log(`🎯 Current Answer: ${currentQ.name}`);
+      }
+    }
+  }, [currentRoom?.status, (currentRoom?.gameState as any)?.currentPlayerIndex]);
+
+  // Start local timer only for non-multiplayer or pre-game; when playing, rely on server timer
+  useEffect(() => {
+    if (currentRoom?.status === 'playing') return;
+    if (players.length > 0) startTimer();
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [currentIndex, players.length, currentRoom?.status]);
 
   const startTimer = () => {
-    clearInterval(intervalRef.current!);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
     setTimer(20);
     intervalRef.current = setInterval(() => {
       setTimer(prev => {
@@ -60,11 +200,6 @@ const QuizGame: React.FC = () => {
     }, 1000);
   };
 
-  useEffect(() => {
-    if (players.length > 0) startTimer();
-    return () => clearInterval(intervalRef.current!);
-  }, [currentIndex]);
-
   const currentPlayer = players[currentIndex];
 
   const nextPlayer = () => {
@@ -74,11 +209,15 @@ const QuizGame: React.FC = () => {
     if (nextIndex >= players.length) {
       console.log('🎉 Game complete. Showing Game Over...');
       setShowGameOver(true);
-      clearInterval(intervalRef.current!);
-      setTimeout(() => {
-        setShowGameOver(false);
-        fetchPlayers();
-      }, 2000);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      // Don't auto-reset in multiplayer - let server handle it
+      if (!currentRoom) {
+        setTimeout(() => {
+          setShowGameOver(false);
+        }, 2000);
+      }
     } else {
       console.log('🔍 Next answer is:', players[nextIndex].name);
     }
@@ -86,6 +225,15 @@ const QuizGame: React.FC = () => {
 
   const handleGuess = () => {
     if (!currentPlayer) return;
+    
+    // In multiplayer mode, submit answer to server
+    if (currentRoom?.status === 'playing') {
+      multiplayerSubmitAnswer(input);
+      setInput(''); // Clear input after submitting
+      return;
+    }
+    
+    // Single player mode (fallback)
     const guess = input.trim().toLowerCase();
     const actual = currentPlayer.name.trim().toLowerCase();
 
@@ -104,7 +252,14 @@ const QuizGame: React.FC = () => {
   };
 
   const handleSkip = () => {
-    nextPlayer(); // Don't reset series
+    // In multiplayer mode, skip question via server
+    if (currentRoom?.status === 'playing') {
+      multiplayerSkipQuestion();
+      return;
+    }
+    
+    // Single player mode (fallback)
+    nextPlayer();
   };
 
   // Normalize season to 4-digit start year
@@ -182,6 +337,419 @@ const QuizGame: React.FC = () => {
       });
   };
 
+  const startNewGame = async (): Promise<void> => {
+    if (isResettingGame) return;
+    
+    console.log('🔄 Starting new game - returning to lobby...');
+    setIsResettingGame(true);
+    
+    try {
+      if (currentRoom) {
+        console.log('🔄 Requesting game reset from server...');
+        await multiplayerResetGame();
+        console.log('✅ Game state reset, returning to lobby');
+        
+        setScore(0);
+        setSeries(0);
+        setCurrentIndex(0);
+        setInput('');
+        setTimer(20);
+        setShowGameOver(false);
+        
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error resetting game:', error);
+    } finally {
+      setIsResettingGame(false);
+    }
+  };
+
+  // Custom start game handler
+  const handleStartGame = async () => {
+    if (isStartingGame) return;
+    
+    setIsStartingGame(true);
+    try {
+      await startGame();
+    } catch (error) {
+      console.error('Failed to start game:', error);
+      setIsStartingGame(false);
+    }
+  };
+
+  // Show authentication required screen
+  if (authChecked && !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118]">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-red-400 text-2xl">🔒</span>
+          </div>
+          <h2 className="text-2xl font-bold text-red-400 mb-2">Authentication Required</h2>
+          <p className="text-lg text-white/80 mb-6">
+            You need to be logged in to play multiplayer quiz games.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => window.location.href = '/login'}
+              className="bg-[#ffd600] text-black font-semibold px-6 py-2 rounded-md hover:bg-yellow-400 transition-colors"
+            >
+              Login
+            </button>
+            <button
+              onClick={() => window.location.href = '/register'}
+              className="bg-blue-500 text-white font-semibold px-6 py-2 rounded-md hover:bg-blue-600 transition-colors"
+            >
+              Register
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading screen while checking authentication
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600] mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Checking Authentication...</h2>
+          <p className="text-lg text-white/80">Please wait</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading screen while game is starting
+  if (currentRoom?.status === 'playing' && !currentRoom?.gameState?.players) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600] mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Starting Game...</h2>
+          <p className="text-lg text-white/80">Loading quiz questions</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show game over screen
+  if (showGameOver) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118]">
+        <h2 className="text-2xl font-bold">🎉 Game Over</h2>
+        
+        {/* Winner Display */}
+        <div className="text-center">
+          <p className="text-lg text-white/80">
+            {currentRoom?.gameState?.winner === currentUserId ? 
+              '🏆 Congratulations! You won!' : 
+              `🏆 Winner: ${currentRoom?.players.find(p => p.userId === currentRoom?.gameState?.winner)?.username || 'Unknown'}`
+            }
+          </p>
+          {currentRoom?.gameState?.scores && (
+            <p className="text-sm text-white/60 mt-1">
+              Final Score: {currentRoom.gameState.scores[currentRoom.gameState.winner || ''] || 0} points
+            </p>
+          )}
+        </div>
+
+        {/* Final Scores */}
+        {currentRoom?.gameState?.scores && (
+          <div className="bg-white/10 rounded-lg p-4 mt-4">
+            <h3 className="text-lg font-semibold mb-3 text-center">Final Scores</h3>
+            <div className="space-y-2">
+              {Object.entries(currentRoom.gameState.scores)
+                .sort(([,a], [,b]) => (b as number) - (a as number))
+                .map(([userId, score]: [string, number]) => (
+                <div key={userId} className={`flex justify-between items-center px-3 py-2 rounded ${
+                  userId === currentRoom?.gameState?.winner ? 'bg-yellow-500/20 border border-yellow-500' : 'bg-white/5'
+                }`}>
+                  <span className={userId === currentUserId ? 'font-semibold' : ''}>
+                    {currentRoom?.players.find(p => p.userId === userId)?.username || 'Unknown'} {userId === currentUserId ? '(You)' : ''}
+                  </span>
+                  <span className="font-mono">{score} pts</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex gap-4">
+          <button 
+            onClick={async () => {
+              if (isStartingNewGameFromWinner) return;
+              
+              console.log('🔄 Starting new game from winner screen...');
+              setIsStartingNewGameFromWinner(true);
+              
+              try {
+                await startNewGame();
+                console.log('✅ New game started, returning to lobby');
+              } catch (error) {
+                console.error('❌ Error starting new game:', error);
+              } finally {
+                setIsStartingNewGameFromWinner(false);
+              }
+            }}
+            disabled={isStartingNewGameFromWinner}
+            className={`px-6 py-2 rounded-md font-semibold transition-colors ${
+              isStartingNewGameFromWinner 
+                ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                : 'bg-emerald-500 text-black hover:bg-emerald-600'
+            }`}
+          >
+            {isStartingNewGameFromWinner ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300"></div>
+                Starting...
+              </div>
+            ) : (
+              'New Game'
+            )}
+          </button>
+          
+          <button 
+            onClick={async () => {
+              if (isLeavingRoom) return;
+              
+              console.log('🏠 Going back to home...');
+              setIsLeavingRoom(true);
+              
+              try {
+                if (currentRoom) {
+                  await leaveRoom();
+                }
+                window.location.href = '/';
+              } catch (error) {
+                console.error('❌ Error leaving room:', error);
+                window.location.href = '/';
+              } finally {
+                setIsLeavingRoom(false);
+              }
+            }}
+            disabled={isLeavingRoom}
+            className={`px-6 py-2 rounded-md font-semibold transition-colors ${
+              isLeavingRoom 
+                ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+            }`}
+          >
+            {isLeavingRoom ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300"></div>
+                Leaving...
+              </div>
+            ) : (
+              'Back to Home'
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Multiplayer lobby UI
+  const shouldShowLobby = !isConnected || !currentRoom || currentRoom.status === 'waiting' || currentRoom.status === 'starting';
+  const isMyTurn = Boolean(currentRoom?.gameState && currentUserId && (currentRoom.gameState as any).currentTurnUserId === currentUserId);
+  const currentTurnUserId = (currentRoom?.gameState as any)?.currentTurnUserId as string | undefined;
+  const currentTurnUsername = currentTurnUserId ? currentRoom?.players.find(p => p.userId === currentTurnUserId)?.username : undefined;
+  
+  if (shouldShowLobby) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0e1118] p-6 relative">
+        {/* Loading overlay when starting game */}
+        {(isStartingGame || currentRoom?.status === 'starting') && (
+          <div className="absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600] mx-auto mb-4"></div>
+              <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Starting Game...</h2>
+              <p className="text-lg text-white/80">Loading quiz questions</p>
+              <p className="text-sm text-white/60 mt-2">This may take a few moments</p>
+              <p className="text-xs text-white/40 mt-2">Room Status: {currentRoom?.status || 'unknown'}</p>
+            </div>
+          </div>
+        )}
+        
+        <div className="bg-[#262346] rounded-lg p-8 max-w-md w-full">
+          <h2 className="text-2xl font-bold text-[#ffd600] mb-6 text-center">🧠 Quiz Game Lobby</h2>
+          <p className="text-white/70 text-sm text-center mb-6">
+            Enter your username to join a room and play with other players. The first player becomes the host and can start the game when ready.
+          </p>
+          
+          {!isConnected && (
+            <div className="text-center mb-6">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffd600] mx-auto mb-2"></div>
+              <p className="text-white/70">Connecting to server...</p>
+            </div>
+          )}
+          
+          {multiplayerError && (
+            <div className="bg-red-500/20 border border-red-500 rounded-md p-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-red-400 text-lg">⚠️</span>
+                <div>
+                  <p className="text-red-400 text-sm font-medium">Error</p>
+                  <p className="text-red-300 text-sm">{multiplayerError}</p>
+                  {multiplayerError.includes('Room is full') && (
+                    <p className="text-red-200 text-xs mt-1">
+                      Try joining a different room or creating a new one.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {isConnected && !currentRoom && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-white text-sm mb-2">Username</label>
+                <input
+                  type="text"
+                  value={inputUsername}
+                  onChange={(e) => setInputUsername(e.target.value)}
+                  className="w-full bg-[#1e2033] text-white px-3 py-2 rounded-md border border-white/20"
+                  placeholder="Enter your username"
+                />
+                <p className="text-white/40 text-xs mt-1">
+                  Your ID: <span className="font-mono">{authenticatedUserId || 'Not authenticated'}</span>
+                </p>
+              </div>
+              
+              <button
+                onClick={() => joinLobby(authenticatedUserId || '', inputUsername)}
+                disabled={!inputUsername || !authenticatedUserId}
+                className="w-full bg-[#fbbc05] text-black font-semibold py-2 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Join Lobby
+              </button>
+            </div>
+          )}
+          
+          {currentRoom && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-white/70 text-sm">Room ID: <span className="text-[#ffd600] font-mono">{currentRoom.roomId}</span></p>
+                <div className="flex items-center justify-center gap-2 mt-1">
+                  <p className="text-white/70 text-sm">Players: {currentRoom.players.length}/4</p>
+                  {currentRoom.players.length >= 4 && (
+                    <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                      FULL
+                    </span>
+                  )}
+                </div>
+                
+                {/* Room Capacity Progress Bar */}
+                <div className="mt-3">
+                  <div className="flex justify-between text-xs text-white/60 mb-1">
+                    <span>Room Capacity</span>
+                    <span>{Math.round((currentRoom.players.length / 4) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        currentRoom.players.length >= 4 
+                          ? 'bg-red-500' 
+                          : currentRoom.players.length >= 3 
+                            ? 'bg-yellow-500' 
+                            : 'bg-green-500'
+                      }`}
+                      style={{ width: `${(currentRoom.players.length / 4) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                {currentRoom.players.length === 1 && (
+                  <p className="text-[#ffd600] text-sm font-medium mt-2">🎯 You are the host! Wait for other players to join.</p>
+                )}
+                {currentRoom.players.length >= 4 && (
+                  <p className="text-red-400 text-sm font-medium mt-2">⚠️ Room is full! No more players can join.</p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                {currentRoom.players.map((player) => (
+                  <div key={player.userId} className="flex items-center justify-between bg-[#1e2033] p-2 rounded">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white text-sm">{player.username}</span>
+                      {player.isHost && (
+                        <span className="text-xs px-2 py-1 rounded bg-[#ffd600] text-black font-medium">
+                          👑 Host
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded ${player.isReady ? 'bg-green-500 text-white' : 'bg-gray-500 text-white'}`}>
+                      {player.isReady ? 'Ready' : 'Not Ready'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => toggleReady()}
+                  className="flex-1 bg-blue-500 text-white font-semibold py-2 px-4 rounded-md"
+                >
+                  {currentRoom.players.find(p => p.userId === currentUserId)?.isReady ? 'Not Ready' : 'Ready'}
+                </button>
+                
+                {currentRoom.players.find(p => p.userId === currentUserId)?.isHost && (
+                  <button
+                    onClick={handleStartGame}
+                    disabled={currentRoom.players.length < 2 || !currentRoom.players.every(p => p.isReady) || isStartingGame || currentRoom.status === 'starting'}
+                    className="flex-1 bg-emerald-500 text-black font-semibold py-2 px-4 rounded-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    title={
+                      isStartingGame || currentRoom.status === 'starting'
+                        ? "Starting game..."
+                        : currentRoom.players.length < 2 
+                          ? "Need at least 2 players to start" 
+                          : !currentRoom.players.every(p => p.isReady) 
+                            ? "All players must be ready" 
+                            : "Start the game!"
+                    }
+                  >
+                    {(isStartingGame || currentRoom.status === 'starting') ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
+                        Starting...
+                      </>
+                    ) : (
+                      currentRoom.players.length < 2 
+                        ? "Need 2+ Players" 
+                        : !currentRoom.players.every(p => p.isReady) 
+                          ? "Waiting for Ready" 
+                          : "Start Game"
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          <button
+            onClick={() => {
+              if (currentRoom) leaveRoom();
+              window.location.href = '/';
+            }}
+            className="w-full mt-4 bg-gray-500 text-white font-semibold py-2 px-4 rounded-md"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Only show game when we're actually playing
+  if (!currentRoom || currentRoom.status !== 'playing' || !currentRoom.gameState?.players) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center bg-[#0e1118] px-4 py-6 text-white">
       {/* Game Over Screen */}
@@ -196,7 +764,7 @@ const QuizGame: React.FC = () => {
       <div className="w-full max-w-4xl grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-[#1a1e2d] rounded-lg flex flex-col items-center py-4">
           <p className="text-sm text-gray-400">Duration</p>
-          <p className="text-xl font-bold text-blue-400">⏱️ {timer} s</p>
+          <p className="text-xl font-bold text-blue-400">⏱️ {currentRoom?.status === 'playing' ? ((currentRoom?.gameState as any)?.timer ?? timer) : timer} s</p>
         </div>
         <div className="bg-[#1a1e2d] rounded-lg flex flex-col items-center py-4">
           <p className="text-sm text-gray-400">Score</p>
@@ -214,6 +782,25 @@ const QuizGame: React.FC = () => {
         </div>
       </div>
 
+      {/* Current Turn Indicator */}
+      <div className="w-full max-w-4xl bg-[#262346] rounded-md px-6 py-3 mb-4 flex items-center gap-3">
+        <div className="w-7 h-7 rounded-full bg-white text-[#3b27ff] text-sm font-bold grid place-items-center">
+          {(currentTurnUsername || 'U')[0]}
+        </div>
+        <span className="text-white font-medium text-sm">
+          {currentTurnUsername ? `${currentTurnUsername}'s turn` : 'Waiting...'}
+        </span>
+        {isMyTurn && (
+          <div className="flex items-center gap-1 ml-3">
+            <span className="text-yellow-400 text-lg">✋</span>
+            <span className="text-yellow-400 text-xs font-medium">Your Turn</span>
+          </div>
+        )}
+        <div className="ml-auto text-xs text-white/70">
+          ⏱️ {currentRoom?.status === 'playing' ? ((currentRoom?.gameState as any)?.timer ?? timer) : timer}s left
+        </div>
+      </div>
+
       {/* Input Section */}
       <div className="w-full max-w-4xl flex flex-col sm:flex-row items-center gap-4 mb-6">
         <input
@@ -222,16 +809,19 @@ const QuizGame: React.FC = () => {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Write the name of the football player..."
           className="flex-grow rounded-md bg-[#1a1e2d] py-3 px-4 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+          disabled={currentRoom?.status === 'playing' && !isMyTurn}
         />
         <button
           onClick={handleGuess}
-          className="bg-[#1a1e2d] hover:bg-[#2a2f4a] rounded-md py-3 px-5 text-sm sm:text-base font-medium"
+          className={`rounded-md py-3 px-5 text-sm sm:text-base font-medium ${currentRoom?.status === 'playing' && !isMyTurn ? 'bg-gray-600 text-gray-300 cursor-not-allowed' : 'bg-[#1a1e2d] hover:bg-[#2a2f4a]'}`}
+          disabled={currentRoom?.status === 'playing' && !isMyTurn}
         >
           Enter
         </button>
         <button
           onClick={handleSkip}
-          className="bg-[#1a1e2d] hover:bg-[#2a2f4a] rounded-md py-3 px-5 text-sm sm:text-base font-medium"
+          className={`rounded-md py-3 px-5 text-sm sm:text-base font-medium ${currentRoom?.status === 'playing' && !isMyTurn ? 'bg-gray-600 text-gray-300 cursor-not-allowed' : 'bg-[#1a1e2d] hover:bg-[#2a2f4a]'}`}
+          disabled={currentRoom?.status === 'playing' && !isMyTurn}
         >
           Skip
         </button>
@@ -260,8 +850,39 @@ const QuizGame: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Game Controls */}
+      <div className="w-full max-w-4xl flex justify-between mt-8">
+        <button 
+          className={`font-semibold px-8 py-2 rounded ${
+            isResettingGame 
+              ? 'bg-gray-500 text-gray-300 cursor-not-allowed' 
+              : 'bg-emerald-500 text-black hover:bg-emerald-600'
+          }`}
+          onClick={startNewGame}
+          disabled={isResettingGame}
+        >
+          {isResettingGame ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-300"></div>
+              Resetting...
+            </div>
+          ) : (
+            'New Game'
+          )}
+        </button>
+      </div>
     </div>
   );
 };
 
-export default QuizGame;
+// Wrapper component with MultiplayerProvider
+const QuizGameWithProvider: React.FC = () => {
+  return (
+    <MultiplayerProvider namespace="/quiz-multiplayer">
+      <QuizGame />
+    </MultiplayerProvider>
+  );
+};
+
+export default QuizGameWithProvider;

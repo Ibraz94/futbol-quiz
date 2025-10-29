@@ -50,6 +50,12 @@ export interface GameState {
     wildcardUsed: boolean;
     gameStartTime?: Date;
   }>;
+  // Quiz game specific properties
+  players?: any[];
+  scores?: Record<string, number>;
+  series?: Record<string, number>;
+  timer?: number;
+  currentQuestionIndex?: number;
 }
 
 export interface Room {
@@ -87,6 +93,10 @@ interface MultiplayerContextType {
   getGameState: () => Promise<void>;
   resetGame: () => Promise<void>;
   
+  // Quiz game methods
+  submitAnswer: (answer: string) => Promise<void>;
+  skipQuestion: () => Promise<void>;
+  
   // Chat methods
   sendMessage: (message: string) => void;
   
@@ -107,9 +117,10 @@ export const useMultiplayer = () => {
 
 interface MultiplayerProviderProps {
   children: React.ReactNode;
+  namespace?: string;
 }
 
-export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ children }) => {
+export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ children, namespace = '/bingo-multiplayer' }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
@@ -148,9 +159,15 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       return;
     }
     
+    // Clean up any existing connection
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    
     isConnectingRef.current = true;
     console.log('🔌 Connecting to multiplayer server with authentication...');
-    const newSocket = io(`${WS_BASE_URL}/bingo-multiplayer`, {
+    const newSocket = io(`${WS_BASE_URL}${namespace}`, {
       transports: ['websocket'],
       timeout: 20000,
       auth: {
@@ -391,6 +408,32 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(null);
     });
 
+    // Quiz game specific events
+    newSocket.on('answerSubmitted', (data) => {
+      console.log('📝 Answer submitted by:', data.username);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
+    newSocket.on('questionSkipped', (data) => {
+      console.log('⏭️ Question skipped by:', data.username);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
+    newSocket.on('questionChanged', (data) => {
+      console.log('🔄 Question changed:', data.questionIndex);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
+    newSocket.on('scoreUpdated', (data) => {
+      console.log('📊 Score updated for:', data.username, 'Score:', data.score);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
+    newSocket.on('quizGameEnded', (data) => {
+      console.log('🏆 Quiz game ended! Winner:', data.winner);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
     newSocket.on('error', (data) => {
       console.error('❌ Multiplayer error:', data.message);
       setError(data.message);
@@ -429,8 +472,17 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
   }, [currentRoom, currentUserId]);
 
   const joinLobby = async (userId: string, username: string) => {
+    // Force disconnect and reconnect if not connected
     if (!socketRef.current?.connected) {
-      throw new Error('Not connected to server');
+      console.log('🔌 Not connected, attempting to reconnect...');
+      disconnect();
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+      connect();
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for connection
+      
+      if (!socketRef.current?.connected) {
+        throw new Error('Failed to connect to server');
+      }
     }
     
     // Check if user is authenticated
@@ -444,12 +496,15 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('Join lobby timeout'));
+        console.error('❌ Join lobby timeout after 10 seconds');
+        reject(new Error('Join lobby timeout - please try again'));
       }, 10000);
 
+      console.log('📡 Emitting joinLobby with:', { userId, username });
       socketRef.current!.emit('joinLobby', { userId, username });
       
       const onRoomJoined = (data: any) => {
+        console.log('✅ Room joined successfully');
         clearTimeout(timeout);
         socketRef.current!.off('roomJoined', onRoomJoined);
         socketRef.current!.off('error', onError);
@@ -457,10 +512,11 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       };
 
       const onError = (data: any) => {
+        console.error('❌ Join lobby error:', data.message);
         clearTimeout(timeout);
         socketRef.current!.off('roomJoined', onRoomJoined);
         socketRef.current!.off('error', onError);
-        reject(new Error(data.message));
+        reject(new Error(data.message || 'Failed to join lobby'));
       };
 
       socketRef.current!.on('roomJoined', onRoomJoined);
@@ -586,6 +642,27 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     });
   };
 
+  const submitAnswer = async (answer: string): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot submit answer: not connected or no room');
+    }
+    
+    console.log('📝 Submitting answer:', answer);
+    socketRef.current.emit('submitAnswer', { 
+      userId: currentUserId, 
+      answer: answer.trim() 
+    });
+  };
+
+  const skipQuestion = async (): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot skip question: not connected or no room');
+    }
+    
+    console.log('⏭️ Skipping question');
+    socketRef.current.emit('skipQuestion', { userId: currentUserId });
+  };
+
   const sendMessage = (message: string) => {
     if (!socketRef.current?.connected || !currentRoom) {
       return;
@@ -629,6 +706,8 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     skipTurn,
     getGameState,
     resetGame,
+    submitAnswer,
+    skipQuestion,
     sendMessage,
     error,
     clearError,
