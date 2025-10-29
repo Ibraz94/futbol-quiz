@@ -226,7 +226,23 @@ const BingoGame: React.FC = () => {
     }
   }, [isMultiplayer, currentRoom?.status]);
 
-  // Start countdown timer when game starts
+  // Listen for timer updates from server
+  useEffect(() => {
+    if (!isMultiplayer || !multiplayer.socket) return;
+
+    const handleTimerUpdate = (data: { timeRemaining: number; room: any }) => {
+      console.log('⏰ Received timer update:', data.timeRemaining);
+      setCountdownTimer(data.timeRemaining);
+    };
+
+    multiplayer.socket.on('timerUpdate', handleTimerUpdate);
+
+    return () => {
+      multiplayer.socket?.off('timerUpdate', handleTimerUpdate);
+    };
+  }, [isMultiplayer, multiplayer.socket]);
+
+  // Start countdown timer when game starts (fallback for non-server updates)
   useEffect(() => {
     if (isMultiplayer && currentRoom?.status === 'playing' && currentRoom?.gameState) {
       
@@ -235,7 +251,7 @@ const BingoGame: React.FC = () => {
         clearInterval(timerInterval);
       }
       
-      // Start new countdown timer based on turn start time
+      // Start new countdown timer based on turn start time (fallback)
       const interval = setInterval(() => {
         if (currentRoom?.gameState?.turnStartTime) {
           const elapsed = Date.now() - currentRoom.gameState.turnStartTime;
@@ -523,12 +539,22 @@ const BingoGame: React.FC = () => {
     
     // If multiplayer mode, use WebSocket communication
     if (isMultiplayer && currentRoom?.status === 'playing') {
-      const isMyTurn = currentRoom.players[currentRoom.gameState?.currentPlayerIndex || 0]?.userId === currentUserId;
-      if (!isMyTurn) {
+      // Check if it's the current user's turn using the gameState currentPlayerIndex
+      const gameState = currentRoom.gameState;
+      if (!gameState || gameState.currentPlayerIndex === undefined) {
+        console.log('❌ No game state or current player index');
         return;
       }
       
+      const currentPlayer = currentRoom.players[gameState.currentPlayerIndex];
+      const isMyTurn = currentPlayer?.userId === currentUserId;
       
+      if (!isMyTurn) {
+        console.log('❌ Not your turn. Current player:', currentPlayer?.username, 'Your ID:', currentUserId);
+        return;
+      }
+      
+      console.log('✅ It\'s your turn, sending cell click');
       // Send cell click to multiplayer server
       multiplayerClickCell(cell.name);
       return;
@@ -1102,10 +1128,15 @@ const BingoGame: React.FC = () => {
           <div className="flex items-center justify-center gap-4">
             {/* Wildcard button - show for current player in multiplayer */}
             {isMultiplayer && currentRoom?.status === 'playing' && 
-             currentRoom.players[currentRoom.gameState?.currentPlayerIndex || 0]?.userId === currentUserId && (
+             (() => {
+               const gameState = currentRoom.gameState;
+               if (!gameState || gameState.currentPlayerIndex === undefined) return false;
+               const currentPlayer = currentRoom.players[gameState.currentPlayerIndex];
+               return currentPlayer?.userId === currentUserId;
+             })() && (
               <button
-                disabled={currentRoom.gameState?.playerData?.[currentUserId]?.wildcardUsed}
-                className={`${currentRoom.gameState?.playerData?.[currentUserId]?.wildcardUsed ? 'opacity-50 cursor-not-allowed' : 'bg-[#fbbc05] hover:bg-yellow-400'
+                disabled={currentUserId ? currentRoom.gameState?.playerData?.[currentUserId]?.wildcardUsed : true}
+                className={`${currentUserId && currentRoom.gameState?.playerData?.[currentUserId]?.wildcardUsed ? 'opacity-50 cursor-not-allowed' : 'bg-[#fbbc05] hover:bg-yellow-400'
                   } text-black text-sm font-bold py-1 px-3 rounded-md shadow`}
                 onClick={() => multiplayerUseWildcard()}
               >
@@ -1208,16 +1239,35 @@ const BingoGame: React.FC = () => {
               : 'bg-gray-500 text-gray-300 cursor-not-allowed'
           }`}
           onClick={() => {
-            if (isMultiplayer && currentRoom?.status === 'playing' && 
-                currentRoom.players[currentRoom.gameState?.currentPlayerIndex || 0]?.userId === currentUserId) {
-              multiplayerSkipTurn();
+            if (isMultiplayer && currentRoom?.status === 'playing') {
+              // Check if it's the current user's turn using the gameState currentPlayerIndex
+              const gameState = currentRoom.gameState;
+              if (!gameState || gameState.currentPlayerIndex === undefined) {
+                console.log('❌ No game state or current player index for skip');
+                return;
+              }
+              
+              const currentPlayer = currentRoom.players[gameState.currentPlayerIndex];
+              const isMyTurn = currentPlayer?.userId === currentUserId;
+              
+              if (isMyTurn) {
+                console.log('✅ It\'s your turn, skipping');
+                multiplayerSkipTurn();
+              } else {
+                console.log('❌ Not your turn for skip. Current player:', currentPlayer?.username, 'Your ID:', currentUserId);
+              }
             } else if (!isMultiplayer) {
               handleSkip();
             }
           }}
           disabled={
             isMultiplayer && currentRoom?.status === 'playing' && 
-            currentRoom.players[currentRoom.gameState?.currentPlayerIndex || 0]?.userId !== currentUserId
+            (() => {
+              const gameState = currentRoom.gameState;
+              if (!gameState || gameState.currentPlayerIndex === undefined) return true;
+              const currentPlayer = currentRoom.players[gameState.currentPlayerIndex];
+              return currentPlayer?.userId !== currentUserId;
+            })()
           }
         >
           Skip

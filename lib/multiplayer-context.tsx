@@ -374,6 +374,12 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(prevRoom => data.room || prevRoom);
     });
 
+    // Handle timer updates
+    newSocket.on('timerUpdate', (data) => {
+      console.log('⏰ Timer update:', data.timeRemaining, 'seconds remaining');
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
     // Handle player reconnection
     newSocket.on('playerReconnected', (data) => {
       console.log('🔄 Player reconnected:', data.username);
