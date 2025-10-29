@@ -76,6 +76,7 @@ interface MultiplayerContextType {
   // Room methods
   joinLobby: (userId: string, username: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
+  forceLeaveRoom: () => Promise<void>;
   toggleReady: () => Promise<void>;
   startGame: () => Promise<void>;
   
@@ -373,6 +374,18 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(prevRoom => data.room || prevRoom);
     });
 
+    // Handle player reconnection
+    newSocket.on('playerReconnected', (data) => {
+      console.log('🔄 Player reconnected:', data.username);
+      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+    });
+
+    // Handle force leave success
+    newSocket.on('forceLeaveSuccess', (data) => {
+      console.log('✅ Force leave successful:', data.message);
+      setCurrentRoom(null);
+    });
+
     newSocket.on('error', (data) => {
       console.error('❌ Multiplayer error:', data.message);
       setError(data.message);
@@ -457,6 +470,16 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     
     console.log('🚪 Leaving room:', currentRoom.roomId);
     socketRef.current.emit('leaveRoom', { userId: currentUserId });
+    setCurrentRoom(null);
+  };
+
+  const forceLeaveRoom = async () => {
+    if (!socketRef.current?.connected || !currentUserId) {
+      return;
+    }
+    
+    console.log('🚪 Force leaving any room for user:', currentUserId);
+    socketRef.current.emit('forceLeaveRoom', { userId: currentUserId });
     setCurrentRoom(null);
   };
 
@@ -593,6 +616,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     disconnect,
     joinLobby,
     leaveRoom,
+    forceLeaveRoom,
     toggleReady,
     startGame,
     clickCell,
