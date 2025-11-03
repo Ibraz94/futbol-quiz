@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { MultiplayerProvider, useMultiplayer } from "../../../lib/multiplayer-context";
+import { API_BASE_URL } from "../../../lib/config";
 
 function PlayPageContent() {
   const router = useRouter();
@@ -125,7 +126,7 @@ function PlayPageContent() {
       // Fallback: Fetch valid players via API if event wasn't received
       const fetchValidPlayers = async () => {
         try {
-          const response = await fetch(`http://localhost:4010/leagues/valid-players`, {
+          const response = await fetch(`${API_BASE_URL}/leagues/valid-players`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
