@@ -90,6 +90,7 @@ const BingoGame: React.FC = () => {
   
   // Get user ID from JWT token
   const getUserIdFromToken = (): string | null => {
+    if (typeof window === 'undefined') return null; // SSR-safe
     try {
       const token = localStorage.getItem('access_token');
       if (!token) return null;

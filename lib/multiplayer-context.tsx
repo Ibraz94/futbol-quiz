@@ -18,7 +18,7 @@ export interface GameState {
   currentPlayerIndex: number;
   currentGamePlayerIndex: number;
   remainingPlayers: number;
-  gamePhase: 'lobby' | 'playing' | 'finished';
+  gamePhase: 'lobby' | 'team-selection' | 'playing' | 'finished';
   winner?: string;
   lockedCells: string[];
   turnPhase: 'waiting' | 'playing' | 'transitioning';
@@ -56,6 +56,10 @@ export interface GameState {
   series?: Record<string, number>;
   timer?: number;
   currentQuestionIndex?: number;
+  // Team game specific properties
+  teams?: string[];
+  selectedTeams?: string[];
+  playerSelections?: Record<string, string[]>;
 }
 
 export interface Room {
@@ -63,6 +67,7 @@ export interface Room {
   players: Player[];
   maxPlayers: number;
   status: 'waiting' | 'starting' | 'playing' | 'finished';
+  currentTurnUserId?: string | null;
   gameState?: GameState;
   chatMessages: any[];
 }
@@ -80,7 +85,7 @@ interface MultiplayerContextType {
   disconnect: () => void;
   
   // Room methods
-  joinLobby: (userId: string, username: string) => Promise<void>;
+  joinLobby: (userId: string, username: string, league?: string) => Promise<void>;
   leaveRoom: () => Promise<void>;
   forceLeaveRoom: () => Promise<void>;
   toggleReady: () => Promise<void>;
@@ -90,12 +95,14 @@ interface MultiplayerContextType {
   clickCell: (cellId: string) => Promise<void>;
   useWildcard: () => Promise<void>;
   skipTurn: () => Promise<void>;
-  getGameState: () => Promise<void>;
+  selectTeam: (team: string) => Promise<void>;
   resetGame: () => Promise<void>;
   
   // Quiz game methods
   submitAnswer: (answer: string) => Promise<void>;
   skipQuestion: () => Promise<void>;
+  // Team game methods
+  submitTeamAnswer: (playerName: string, team1: string, team2: string) => Promise<void>;
   
   // Chat methods
   sendMessage: (message: string) => void;
@@ -120,10 +127,31 @@ interface MultiplayerProviderProps {
   namespace?: string;
 }
 
+// Global socket registry (persists across page navigations within the same tab)
+const globalSockets: Record<string, Socket | null> = (globalThis as any).__mp_sockets || ((globalThis as any).__mp_sockets = {});
+
 export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ children, namespace = '/bingo-multiplayer' }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [currentRoom, setCurrentRoomState] = useState<Room | null>(null);
+  const setCurrentRoomRef = useRef<((updater: Room | null | ((prev: Room | null) => Room | null)) => void) | null>(null);
+  
+  // Wrapper to prevent unnecessary updates
+  const setCurrentRoom = React.useCallback((updater: Room | null | ((prev: Room | null) => Room | null)) => {
+    setCurrentRoomState(prevRoom => {
+      const nextRoom = typeof updater === 'function' ? updater(prevRoom) : updater;
+      if (nextRoom === prevRoom) {
+        return prevRoom;
+      }
+      const prevStr = prevRoom ? JSON.stringify(prevRoom) : null;
+      const nextStr = nextRoom ? JSON.stringify(nextRoom) : null;
+      if (prevStr === nextStr) {
+        return prevRoom;
+      }
+      return nextRoom;
+    });
+  }, [namespace]);
+  setCurrentRoomRef.current = setCurrentRoom;
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
   
@@ -140,10 +168,214 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
   
   const socketRef = useRef<Socket | null>(null);
   const isConnectingRef = useRef<boolean>(false);
+  const manualDisconnectRef = useRef<boolean>(false);
+
+  // Restore identity across page loads
+  useEffect(() => {
+    try {
+      const storedUserId = localStorage.getItem('mp_userId');
+      const storedUsername = localStorage.getItem('mp_username');
+      if (storedUserId && !currentUserId) setCurrentUserId(storedUserId);
+      if (storedUsername && !currentUsername) setCurrentUsername(storedUsername);
+    } catch {}
+  }, []);
+
+  // Separate function to attach timerUpdate listener (since it needs special handling)
+  const attachTimerUpdateListener = useCallback((sock: Socket) => {
+    // Remove any existing timerUpdate listener first
+    sock.off('timerUpdate');
+    
+    sock.on('timerUpdate', (data) => {
+      // Update room state with timer - prefer full room data, otherwise merge timer
+      setCurrentRoom(prevRoom => {
+        if (data.room) {
+          // Ensure timer is set correctly - prefer timeRemaining if room timer is missing
+          if (data.timeRemaining !== undefined && (!data.room.gameState || data.room.gameState.timer === undefined)) {
+            return {
+              ...data.room,
+              gameState: {
+                ...data.room.gameState,
+                timer: data.timeRemaining
+              }
+            };
+          }
+          return data.room;
+        }
+        if (data.timeRemaining !== undefined && prevRoom?.gameState) {
+          return {
+            ...prevRoom,
+            gameState: {
+              ...prevRoom.gameState,
+              timer: data.timeRemaining
+            }
+          };
+        }
+        return prevRoom;
+      });
+    });
+  }, [namespace, setCurrentRoom]);
+
+  // Attach socket listeners for this provider instance
+  const attachListeners = useCallback((sock: Socket) => {
+    const off = (event: string) => {
+      try { sock.off(event); } catch {}
+    };
+    // Clean previous handlers for these events
+    [
+      'roomJoined','playerJoined','playerLeft','playerReadyUpdate','gameStarting','gameStarted',
+      'cellClicked','gameEnded','gameReset','gameStateUpdate','wildcardUsed','playerChanged',
+      'turnChanged','timeoutWarning','turnTimeout','gameFinished','timerUpdate','answerResult',
+      'playerReconnected','forceLeaveSuccess','answerSubmitted','questionSkipped','questionChanged',
+      'scoreUpdated','quizGameEnded','validPlayersForTeams','error'
+    ].forEach(off);
+
+    sock.on('roomJoined', (data) => {
+      if (data?.room) {
+        setCurrentRoom(data.room);
+      }
+    });
+    sock.on('playerJoined', (data) => {
+      if (data?.room) {
+        setCurrentRoom(data.room);
+      }
+    });
+    sock.on('playerLeft', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('playerReadyUpdate', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('gameStarting', (data) => {
+      if (data?.room) {
+        setCurrentRoom(data.room);
+      }
+    });
+    sock.on('gameStarted', (data) => {
+      if (data?.room) {
+        // Log the correct answer for the first player when game starts (Bingo game)
+        if (data.room.gameState?.gameData?.players && data.room.gameState?.currentGamePlayerIndex !== undefined) {
+          const currentGamePlayer = data.room.gameState.gameData.players[data.room.gameState.currentGamePlayerIndex];
+          if (currentGamePlayer) {
+            const categories = currentGamePlayer.matchingCategories && currentGamePlayer.matchingCategories.length > 0 
+              ? currentGamePlayer.matchingCategories.join(', ')
+              : 'No matches';
+            
+            console.log(`🎯 Game Started - First Player: ${currentGamePlayer.playerName}`);
+            console.log(`✅ Correct Answer: ${categories}`);
+          }
+        }
+        setCurrentRoom(data.room);
+      }
+    });
+    sock.on('cellClicked', (data) => {
+      // Show red flash for wrong answers (only for the current player - Bingo game)
+      if (data.isCorrect === false) {
+        // Only show red flash for the current player (the one who clicked)
+        if (data.playerId === currentUserIdRef.current) {
+          // Dispatch custom event for red cell flash
+          const event = new CustomEvent('redCellFlash', {
+            detail: { cellName: data.cellId }
+          });
+          window.dispatchEvent(event);
+        }
+      }
+      
+      // Update room state with new locked cells and game state
+      setCurrentRoom(prev => {
+        if (!prev || !prev.gameState) return prev;
+        
+        const newLockedCells = data.lockedCells || prev.gameState.lockedCells || [];
+        
+        return {
+          ...prev,
+          gameState: {
+            ...prev.gameState,
+            lockedCells: newLockedCells,
+            currentPlayerIndex: data.currentPlayerIndex ?? prev.gameState.currentPlayerIndex,
+            gamePhase: data.gamePhase ?? prev.gameState.gamePhase
+          }
+        };
+      });
+    });
+    sock.on('gameEnded', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('gameReset', (data) => setCurrentRoom(() => data.room));
+    // gameStateUpdate listener removed - handled in main connection setup to avoid duplicates
+    sock.on('wildcardUsed', (data) => setCurrentRoom(prev => data.room || prev));
+    sock.on('playerChanged', (data) => setCurrentRoom(prev => data.room || prev));
+    sock.on('turnChanged', (data) => {
+      // Log the correct answer for the new turn (Bingo game)
+      if (data.room?.gameState?.gameData?.players && data.room?.gameState?.currentGamePlayerIndex !== undefined) {
+        const currentGamePlayer = data.room.gameState.gameData.players[data.room.gameState.currentGamePlayerIndex];
+        if (currentGamePlayer) {
+          const categories = currentGamePlayer.matchingCategories && currentGamePlayer.matchingCategories.length > 0 
+            ? currentGamePlayer.matchingCategories.join(', ')
+            : 'No matches';
+          
+          console.log(`🎯 Turn Changed - Current Player: ${currentGamePlayer.playerName}`);
+          console.log(`✅ Correct Answer: ${categories}`);
+        }
+      }
+      setCurrentRoom(prev => data.room || prev);
+    });
+    sock.on('timeoutWarning', () => {});
+    sock.on('turnTimeout', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('gameFinished', (data) => {
+      console.log('🎉 [attachListeners] Game finished event received:', data);
+      if (data?.room) {
+        console.log('✅ [attachListeners] Updating room state with finished game:', {
+          status: data.room.status,
+          gamePhase: data.room.gameState?.gamePhase,
+          winner: data.room.gameState?.winner
+        });
+        setCurrentRoom(data.room);
+      } else {
+        console.warn('⚠️ [attachListeners] gameFinished event missing room data:', data);
+      }
+    });
+    // timerUpdate handler removed from here - handled separately by attachTimerUpdateListener
+    sock.on('answerResult', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('playerReconnected', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('forceLeaveSuccess', () => setCurrentRoom(null));
+    sock.on('answerSubmitted', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('questionSkipped', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('questionChanged', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('scoreUpdated', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('quizGameEnded', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('error', (data) => { console.error('❌ Multiplayer error:', data.message); setError(data.message); });
+  }, [setCurrentRoom]);
 
   const connect = useCallback(() => {
+    // Validate and normalize namespace
+    if (!namespace || typeof namespace !== 'string') {
+      console.error('❌ Invalid namespace in connect:', namespace);
+      setError(`Invalid namespace: ${JSON.stringify(namespace)}`);
+      return;
+    }
+    const normalizedNamespace = namespace.startsWith('/') ? namespace : `/${namespace}`;
+    
+    // Reuse global socket if available
+    if (globalSockets[normalizedNamespace]?.connected) {
+      socketRef.current = globalSockets[normalizedNamespace];
+      setSocket(globalSockets[normalizedNamespace]!);
+      setIsConnected(true);
+      // Rebind listeners for this provider instance
+      if (socketRef.current) {
+        // Attach listeners immediately to catch any events
+        attachListeners(socketRef.current);
+        attachTimerUpdateListener(socketRef.current);
+        // Also request current game state if we don't have a room yet
+        if (!currentRoom && currentUserId) {
+          // Request game state via getGameState if available (team game only)
+          if (normalizedNamespace === '/team-multiplayer') {
+            setTimeout(() => {
+              if (socketRef.current?.connected && currentUserId) {
+                console.log('📡 Requesting game state after reusing socket', { userId: currentUserId, namespace: normalizedNamespace });
+                socketRef.current.emit('getGameState', { userId: currentUserId });
+              }
+            }, 100);
+          }
+        }
+      }
+      return;
+    }
     if (socketRef.current?.connected) {
-      console.log('🔌 Already connected, skipping connection attempt');
+      console.log('🔌 Already connected, skipping connection attempt. Socket ID:', socketRef.current.id, 'NS:', normalizedNamespace);
       return;
     }
     
@@ -166,8 +398,21 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     }
     
     isConnectingRef.current = true;
-    console.log('🔌 Connecting to multiplayer server with authentication...');
-    const newSocket = io(`${WS_BASE_URL}${namespace}`, {
+    
+    // namespace is already validated and normalized above
+    
+    // For socket.io v4, namespace should be in the URL path
+    // Ensure WS_BASE_URL doesn't have trailing slash
+    const baseUrl = WS_BASE_URL.endsWith('/') ? WS_BASE_URL.slice(0, -1) : WS_BASE_URL;
+    const socketUrl = `${baseUrl}${normalizedNamespace}`;
+    
+    console.log('🔌 Connecting to multiplayer server with authentication...', { 
+      namespace: normalizedNamespace, 
+      socketUrl,
+      baseUrl 
+    });
+    
+    const newSocket = io(socketUrl, {
       transports: ['websocket'],
       timeout: 20000,
       auth: {
@@ -187,6 +432,20 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setIsConnected(true);
       setError(null);
       isConnectingRef.current = false;
+      // Save globally for reuse (normalizedNamespace is already defined in the closure)
+      globalSockets[normalizedNamespace] = newSocket;
+      attachListeners(newSocket);
+      attachTimerUpdateListener(newSocket);
+      
+      // Request game state after connection if we don't have a room yet (important for redirects)
+      if (!currentRoom && currentUserId && normalizedNamespace === '/team-multiplayer') {
+        setTimeout(() => {
+          if (newSocket.connected && currentUserId) {
+            console.log('📡 [connect] Requesting game state after new connection', { userId: currentUserId, namespace: normalizedNamespace });
+            newSocket.emit('getGameState', { userId: currentUserId });
+          }
+        }, 100);
+      }
     });
 
     newSocket.on('disconnect', (reason) => {
@@ -195,105 +454,38 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(null);
       
       // Attempt to reconnect if it wasn't a manual disconnect
-      if (reason !== 'io client disconnect') {
-        console.log('🔄 Attempting to reconnect...');
+      if (reason !== 'io client disconnect' && !manualDisconnectRef.current) {
         setTimeout(() => {
           if (!socketRef.current?.connected) {
             connect();
           }
         }, 2000); // Reconnect after 2 seconds
       }
+      manualDisconnectRef.current = false; // reset flag
     });
 
-    newSocket.on('connected', (data) => {
-      // console.log('Server welcome:', data.message);
+    newSocket.on('connected', () => {
     });
 
-    newSocket.on('connect_error', (error) => {
+    newSocket.on('connect_error', (error: any) => {
       console.error('❌ Connection error:', error.message);
+      console.error('❌ Connection error details:', {
+        message: error.message,
+        description: error.description,
+        context: error.context,
+        type: error.type,
+        transport: error.transport,
+        namespace: (error as any).nsp || 'default',
+        socketUrl,
+        normalizedNamespace
+      });
       setError(`Connection failed: ${error.message}`);
       setIsConnected(false);
       isConnectingRef.current = false;
     });
 
-    newSocket.on('roomJoined', (data) => {
-      // console.log('✅ Joined room:', data.room.roomId);
-      setCurrentRoom(data.room);
-    });
-
-    newSocket.on('playerJoined', (data) => {
-      // console.log('👤 Player joined:', data.player.username);
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
-    });
-
-    newSocket.on('playerLeft', (data) => {
-      // console.log('👋 Player left:', data.username);
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
-    });
-
-    newSocket.on('playerReadyUpdate', (data) => {
-      // console.log('✅ Player ready status updated:', data.playerId, data.isReady);
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
-    });
-
-    newSocket.on('gameStarting', (data) => {
-      // console.log('🎮 Game is starting...');
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
-    });
-
-    newSocket.on('gameStarted', (data) => {
-      
-      // Log the correct answer for the current turn
-      if (data.room?.gameState?.gameData?.players && data.room?.gameState?.currentGamePlayerIndex !== undefined) {
-        const currentGamePlayer = data.room.gameState.gameData.players[data.room.gameState.currentGamePlayerIndex];
-        if (currentGamePlayer) {
-          const categories = currentGamePlayer.matchingCategories && currentGamePlayer.matchingCategories.length > 0 
-            ? currentGamePlayer.matchingCategories.join(', ')
-            : 'No matches';
-          
-          console.log(`🎯 Game Started - Current Player: ${currentGamePlayer.playerName}`);
-          console.log(`✅ Correct Answer: ${categories}`);
-        }
-      }
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
-    });
-
-    newSocket.on('cellClicked', (data) => {
-      
-      // Show red flash for wrong answers (only for the current player)
-      if (data.isCorrect === false) {
-        // Only show red flash for the current player (the one who clicked)
-        if (data.playerId === currentUserIdRef.current) {
-          // Dispatch custom event for red cell flash
-          const event = new CustomEvent('redCellFlash', {
-            detail: { cellName: data.cellId }
-          });
-          window.dispatchEvent(event);
-        }
-      } else {
-      }
-      
-      // Update room state with new locked cells and game state
-      setCurrentRoom(prevRoom => {
-        if (!prevRoom || !prevRoom.gameState) return prevRoom;
-        
-        const newLockedCells = data.lockedCells || prevRoom.gameState.lockedCells || [];
-        console.log('🔄 Updating room state:');
-        console.log('  Previous locked cells:', prevRoom.gameState.lockedCells);
-        console.log('  New locked cells:', newLockedCells);
-        console.log('  Is correct:', data.isCorrect);
-        
-        return {
-          ...prevRoom,
-          gameState: {
-            ...prevRoom.gameState,
-            lockedCells: newLockedCells,
-            currentPlayerIndex: data.currentPlayerIndex ?? prevRoom.gameState.currentPlayerIndex,
-            gamePhase: data.gamePhase ?? prevRoom.gameState.gamePhase
-          }
-        };
-      });
-    });
+    // The rest of the event handlers are attached via attachListeners(newSocket)
+    // Note: cellClicked listener is now handled in attachListeners to avoid duplication
 
     newSocket.on('gameEnded', (data) => {
       // console.log('🏆 Game ended! Winner:', data.winner);
@@ -331,8 +523,36 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     });
 
     newSocket.on('gameStateUpdate', (data) => {
-      // console.log('📊 Game state updated');
-      setCurrentRoom(prevRoom => prevRoom ? data.room : null);
+      // Update room state when server sends game state updates
+      if (data.room) {
+        // IMPORTANT: If game is finished, always update immediately (no deep equality check)
+        // This must work even if currentRoom is null (e.g., after page redirect)
+        const isGameFinished = data.room.status === 'finished' || data.room.gameState?.gamePhase === 'finished';
+        
+        if (isGameFinished) {
+          console.log('🎉 [gameStateUpdate] Received finished game state, forcing update:', {
+            status: data.room.status,
+            gamePhase: data.room.gameState?.gamePhase,
+            winner: data.room.gameState?.winner
+          });
+          // Force immediate update for finished games - always replace, even if null
+          setCurrentRoom(data.room);
+        } else {
+          // Use functional update to ensure we're comparing with latest state
+          setCurrentRoom(prevRoom => {
+            // Skip if it's the same room data (deep equality check)
+            if (prevRoom && data.room) {
+              const prevStr = JSON.stringify(prevRoom);
+              const nextStr = JSON.stringify(data.room);
+              if (prevStr === nextStr) {
+                return prevRoom;
+              }
+            }
+            // Always update if prevRoom is null (e.g., after redirect)
+            return data.room;
+          });
+        }
+      }
     });
 
     newSocket.on('wildcardUsed', (data) => {
@@ -347,32 +567,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(prevRoom => data.room || prevRoom);
     });
 
-    newSocket.on('turnChanged', (data) => {
-      // console.log('🔄 Turn changed to player:', data.room.gameState?.currentPlayerIndex);
-      // console.log('=== FRONTEND TURN CHANGED DATA ===');
-      // console.log('Complete Data:', JSON.stringify(data, null, 2));
-      // console.log('Current Player Index:', data.room?.gameState?.currentPlayerIndex);
-      // console.log('Current Game Player Index:', data.room?.gameState?.currentGamePlayerIndex);
-      // console.log('Remaining Players:', data.room?.gameState?.remainingPlayers);
-      // console.log('Turn Phase:', data.room?.gameState?.turnPhase);
-      // console.log('Turn Start Time:', data.room?.gameState?.turnStartTime);
-      // console.log('===============================');
-      
-      // Log the correct answer for the new turn
-      if (data.room?.gameState?.gameData?.players && data.room?.gameState?.currentGamePlayerIndex !== undefined) {
-        const currentGamePlayer = data.room.gameState.gameData.players[data.room.gameState.currentGamePlayerIndex];
-        if (currentGamePlayer) {
-          const categories = currentGamePlayer.matchingCategories && currentGamePlayer.matchingCategories.length > 0 
-            ? currentGamePlayer.matchingCategories.join(', ')
-            : 'No matches';
-          
-          console.log(`🎯 Turn Changed - Current Player: ${currentGamePlayer.playerName}`);
-          console.log(`✅ Correct Answer: ${categories}`);
-        }
-      }
-      // Don't set room to null during turn changes - keep the current room
-      setCurrentRoom(prevRoom => data.room || prevRoom);
-    });
+    // Note: turnChanged listener is now handled in attachListeners to avoid duplication
 
     newSocket.on('timeoutWarning', (data) => {
       console.log(`⚠️ Timeout warning: ${data.timeRemaining} seconds remaining for ${data.currentPlayer?.username}`);
@@ -391,8 +586,29 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       setCurrentRoom(prevRoom => data.room || prevRoom);
     });
 
-    // Handle timer updates
-    newSocket.on('timerUpdate', (data) => {
+    // Team game finish - CRITICAL: Update room state immediately for ALL players
+    // This must work even if currentRoom is null (e.g., after page redirect)
+    newSocket.on('gameFinished', (data) => {
+      if (data?.room) {
+        // Force update room state - always replace, even if currentRoom is null
+        // This ensures the modal shows even after redirects
+        setCurrentRoom(data.room);
+      } else {
+      }
+    });
+
+    // Listen for valid players for teams (for debugging)
+    newSocket.on('validPlayersForTeams', (data: any) => {
+      if (data?.team1 && data?.team2 && data?.validPlayers) {
+        console.log(`🎯 Correct answers (any of these):`, data.validPlayers.join(', '));
+      }
+    });
+
+    // Attach timerUpdate listener separately
+    attachTimerUpdateListener(newSocket);
+
+    // Optional: answer result feedback
+    newSocket.on('answerResult', (data) => {
       setCurrentRoom(prevRoom => prevRoom ? data.room : null);
     });
 
@@ -441,15 +657,15 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
 
     socketRef.current = newSocket;
     setSocket(newSocket);
-  }, []);
+  }, [namespace, attachListeners, attachTimerUpdateListener, setCurrentRoom, currentRoom, currentUserId]);
 
   const disconnect = useCallback(() => {
     if (socketRef.current && socketRef.current.connected) {
-      console.log('🔌 Gracefully disconnecting WebSocket...');
+      // Mark manual disconnect to distinguish from server/network drops
+      manualDisconnectRef.current = true;
       
       // Leave room first if in one
       if (currentRoom && currentUserId) {
-        console.log('🚪 Leaving room before disconnect...');
         socketRef.current.emit('leaveRoom', { userId: currentUserId });
       }
       
@@ -471,18 +687,16 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     }
   }, [currentRoom, currentUserId]);
 
-  const joinLobby = async (userId: string, username: string) => {
-    // Force disconnect and reconnect if not connected
+  const joinLobby = async (userId: string, username: string, league?: string) => {
+    // Ensure connection; do NOT disconnect if already connected
     if (!socketRef.current?.connected) {
-      console.log('🔌 Not connected, attempting to reconnect...');
-      disconnect();
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
       connect();
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds for connection
-      
-      if (!socketRef.current?.connected) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    if (!socketRef.current?.connected) {
         throw new Error('Failed to connect to server');
       }
+    } else {
+      console.log('🔌 Already connected, skipping connection attempt');
     }
     
     // Check if user is authenticated
@@ -493,18 +707,24 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     
     setCurrentUserId(userId);
     setCurrentUsername(username);
+    try {
+      localStorage.setItem('mp_userId', userId);
+      localStorage.setItem('mp_username', username);
+    } catch {}
     
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        console.error('❌ Join lobby timeout after 10 seconds');
+        // Join lobby timeout
         reject(new Error('Join lobby timeout - please try again'));
       }, 10000);
 
-      console.log('📡 Emitting joinLobby with:', { userId, username });
-      socketRef.current!.emit('joinLobby', { userId, username });
+      socketRef.current!.emit('joinLobby', { userId, username, league });
       
       const onRoomJoined = (data: any) => {
-        console.log('✅ Room joined successfully');
+        // Update room state immediately
+        if (data?.room) {
+          setCurrentRoom(data.room);
+        }
         clearTimeout(timeout);
         socketRef.current!.off('roomJoined', onRoomJoined);
         socketRef.current!.off('error', onError);
@@ -591,12 +811,12 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     socketRef.current.emit('skipTurn', { userId: currentUserId });
   };
 
-  const getGameState = async () => {
-    if (!socketRef.current?.connected || !currentRoom) {
-      return;
+
+  const selectTeam = async (team: string): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot select team: not connected or no room');
     }
-    
-    socketRef.current.emit('getGameState');
+    socketRef.current.emit('selectTeam', { userId: currentUserId, team });
   };
 
   const resetGame = async (): Promise<void> => {
@@ -604,7 +824,6 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       throw new Error('Cannot reset game: not connected or no room');
     }
     
-    console.log('🔄 Resetting game state...');
     
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -663,6 +882,18 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     socketRef.current.emit('skipQuestion', { userId: currentUserId });
   };
 
+  const submitTeamAnswer = async (playerName: string, team1: string, team2: string): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot submit answer: not connected or no room');
+    }
+    socketRef.current.emit('submitAnswer', {
+      userId: currentUserId,
+      playerName: playerName?.trim(),
+      team1,
+      team2,
+    });
+  };
+
   const sendMessage = (message: string) => {
     if (!socketRef.current?.connected || !currentRoom) {
       return;
@@ -676,17 +907,29 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     setError(null);
   };
 
-  // Auto-connect on mount
+  // Auto-connect on mount (only if namespace is valid)
   useEffect(() => {
-    connect();
+    // Ensure namespace is valid before connecting
+    // Double-check that namespace exists and is a valid string
+    if (!namespace || typeof namespace !== 'string' || namespace.trim() === '') {
+      console.warn('⚠️ Cannot connect: invalid namespace', namespace);
+      return;
+    }
     
-    return () => {
-      // Only disconnect if we're actually connected
-      if (socketRef.current?.connected) {
-        disconnect();
-      }
-    };
-  }, []); // Remove dependencies to prevent re-running
+    // Normalize namespace to ensure it starts with /
+    const normalizedNamespace = namespace.startsWith('/') ? namespace : `/${namespace}`;
+    
+    // Additional validation: namespace should match expected format
+    if (!/^\/[a-zA-Z0-9-]+$/.test(normalizedNamespace)) {
+      console.error('❌ Invalid namespace format:', normalizedNamespace);
+      setError(`Invalid namespace format: ${normalizedNamespace}`);
+      return;
+    }
+    
+    connect();
+    // Do not auto-disconnect on unmount; keep socket alive across page navigations
+    return () => {};
+  }, [namespace, connect]);
 
   const value: MultiplayerContextType = {
     socket,
@@ -704,10 +947,11 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     clickCell,
     useWildcard,
     skipTurn,
-    getGameState,
+    selectTeam,
     resetGame,
     submitAnswer,
     skipQuestion,
+    submitTeamAnswer,
     sendMessage,
     error,
     clearError,
