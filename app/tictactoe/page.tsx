@@ -1,10 +1,12 @@
     "use client";
 
-    import { useEffect, useState, useRef, Suspense } from "react";
+    import { useEffect, useState, useRef, Suspense, useMemo } from "react";
+    import { flushSync } from "react-dom";
     import axios from "axios";
     import Image from "next/image";
     import { API_BASE_URL } from "../../lib/config";
     import { useRouter, useSearchParams } from "next/navigation";
+    import { useMultiplayer, MultiplayerProvider } from "../../lib/multiplayer-context";
 
     function TictactoeGame() {
   const [topCategories, setTopCategories] = useState<{ name: string; slug: string; categoryId: number }[]>([]);
@@ -47,10 +49,59 @@
   const [turnTimer, setTurnTimer] = useState(20);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [dataReady, setDataReady] = useState(false);
-  const [pendingWin, setPendingWin] = useState<null | 'Player 1' | 'Player 2'>(null);
+      const [pendingWin, setPendingWin] = useState<string | null>(null);
+  const submittedCellRef = useRef<{ row: number; col: number } | null>(null);
+  const [modalShouldClose, setModalShouldClose] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const league = searchParams?.get('league') || 'bundesliga'; // Default to bundesliga if no league specified
+      const isMultiplayer = searchParams?.get('multiplayer') === 'true';
+      
+      // Multiplayer context - always call hook unconditionally (hook rules)
+      // Will be null if not inside MultiplayerProvider
+      const multiplayer = useMultiplayer();
+      // Only use multiplayer values if in multiplayer mode and context is available
+      const {
+        isConnected: mpIsConnected,
+        currentRoom,
+        currentUserId,
+        socket,
+        clickTictactoeCell,
+        submitTictactoeAnswer,
+        skipTurn: mpSkipTurn,
+        resetGame: mpResetGame,
+        leaveRoom: mpLeaveRoom,
+      } = (isMultiplayer && multiplayer) ? multiplayer : {};
+      
+      // Get multiplayer state
+      const mpGameState = currentRoom?.gameState as any;
+      const mpCellStates = mpGameState?.cellStates;
+      const mpTopCategories = mpGameState?.topCategories || [];
+      const mpLeftCategories = mpGameState?.leftCategories || [];
+      const mpPairs = mpGameState?.pairs || [];
+      const mpCurrentTurnUserId = currentRoom?.currentTurnUserId;
+      const mpIsMyTurn = !!currentUserId && mpCurrentTurnUserId === currentUserId;
+      const mpTimer = mpGameState?.timer;
+      const mpScores = mpGameState?.scores || {};
+      const mpGameWins = mpGameState?.gameWins || {};
+      const mpIsFinished = currentRoom?.status === 'finished' || mpGameState?.gamePhase === 'finished';
+      const mpWinnerUserId = mpGameState?.winner;
+      const mpSeriesWinner = mpGameState?.seriesWinner;
+      const mpCurrentGame = mpGameState?.currentGame || 1;
+      
+      // Get current player's symbol
+      const mySymbol = useMemo(() => {
+        if (!currentRoom || !currentUserId) return null;
+        const player = currentRoom.players.find(p => p.userId === currentUserId);
+        return (player as any)?.symbol || null;
+      }, [currentRoom, currentUserId]);
+      
+      // Get current turn player's symbol
+      const currentTurnSymbol = useMemo(() => {
+        if (!currentRoom || !mpCurrentTurnUserId) return null;
+        const player = currentRoom.players.find(p => p.userId === mpCurrentTurnUserId);
+        return (player as any)?.symbol || null;
+      }, [currentRoom, mpCurrentTurnUserId]);
 
       // 3x3 grid state: { locked, image, answer }
       type CellState = { locked: boolean; image: 'X' | 'O' | null; answer: string | null };
@@ -60,25 +111,206 @@
       const [currentTurn, setCurrentTurn] = useState<'X' | 'O'>('X');
       const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null);
 
-      // Fetch all players when page loads
+      // Track if players are loaded
+      const [playersLoaded, setPlayersLoaded] = useState(false);
+      
+      // Fetch all players when page loads (for player search)
       useEffect(() => {
         const fetchAllPlayers = async () => {
           try {
             console.log('🎯 Fetching all players for the session...');
+            setPlayersLoaded(false);
             const response = await axios.get(`${API_BASE_URL}/tictactoe/players`);
             const players = response.data.players || [];
             setAllPlayers(players);
+            setPlayersLoaded(true);
             console.log(`✅ Loaded ${players.length} players for the session`);
           } catch (error) {
             console.error('❌ Error fetching all players:', error);
             setAllPlayers([]);
+            setPlayersLoaded(false);
           }
         };
 
         fetchAllPlayers();
       }, []);
 
+      // Multiplayer: Listen for game state updates
       useEffect(() => {
+        if (!isMultiplayer || !socket || !currentUserId) return;
+        
+        // CRITICAL: Listen for gameReset event FIRST - before ANY other logic
+        // This MUST work even when showing game over screen, so it's at the very top
+        const handleGameReset = (data: any) => {
+          // Use window.location for immediate hard redirect - cannot be overridden
+          // This ensures redirect happens even if component is showing game over screen
+          window.location.href = '/tictactoe-leagues';
+        };
+        
+        socket.on('gameReset', handleGameReset);
+        
+        // Set up event listeners once
+        const handleGameStateUpdate = (data: any) => {
+          if (data?.room) {
+            // Room state is updated by context
+          }
+        };
+        
+        const handleCellClicked = (data: any) => {
+          
+          // Check if players are loaded
+          if (!playersLoaded || allPlayers.length === 0) {
+            console.error('❌ [Frontend] Players not loaded yet, cannot open modal');
+            return;
+          }
+          
+          // Don't open modal if we just submitted an answer for this cell
+          // This prevents reopening the modal after answer submission
+          if (data?.userId === currentUserId && data?.row !== undefined && data?.col !== undefined) {
+            // Check if this is the same cell we just submitted an answer for
+            const isSameCell = submittedCellRef.current?.row === data.row && submittedCellRef.current?.col === data.col;
+            if (isSameCell) {
+              console.log('⚠️ [Frontend] Ignoring cellClicked - answer already submitted for this cell');
+              return;
+            }
+            
+            console.log('✅ [Frontend] Opening modal for cell:', { 
+              row: data.row, 
+              col: data.col,
+              playersLoaded,
+              playersCount: allPlayers.length
+            });
+            setModalShouldClose(false); // Reset close flag
+            setModalOpen(true);
+            setActivePair([data.topCategory?.name, data.leftCategory?.name]);
+            setActiveCell({ row: data.row, col: data.col });
+            setSearch("");
+            setShowSuggestions(false);
+          }
+        };
+        
+        const handleAnswerResult = (data: any) => {
+          if (data?.userId && data?.correct !== undefined) {
+            // Log answer result (without revealing correct answers to prevent cheating)
+            if (data.notYourTurn) {
+              console.log('⚠️ [Frontend] Answer submitted out of turn');
+            } else if (data.correct) {
+              console.log('✅ [Frontend] CORRECT ANSWER');
+            } else {
+              console.log('❌ [Frontend] WRONG ANSWER');
+            }
+            
+            // Ensure modal is closed after answer result (backup)
+            setModalShouldClose(true);
+            setModalOpen(false);
+            setSearch("");
+            setActivePair(null);
+            setActiveCell(null);
+            setShowSuggestions(false);
+            
+            // Clear submitted cell ref if this is our answer
+            if (data.userId === currentUserId && data.row !== undefined && data.col !== undefined) {
+              submittedCellRef.current = null;
+              setModalShouldClose(false);
+            }
+          }
+        };
+        
+        const handleGameWon = (data: any) => {
+          // Game won - show pending win (grid visible for 5 seconds)
+          if (data?.winner === currentUserId) {
+            setPendingWin('You');
+          } else {
+            // Get room from multiplayer context
+            const room = multiplayer?.currentRoom;
+            const winnerPlayer = room?.players.find(p => p.userId === data?.winner);
+            setPendingWin(winnerPlayer?.username || 'Winner');
+          }
+        };
+        
+        const handleShowWinnerModal = (data: any) => {
+          // Show winner modal after 5 seconds
+          if (data?.winner === currentUserId) {
+            setWinner('You');
+          } else {
+            // Get room from multiplayer context
+            const room = multiplayer?.currentRoom;
+            const winnerPlayer = room?.players.find(p => p.userId === data?.winner);
+            setWinner(winnerPlayer?.username || 'Winner');
+          }
+        };
+        
+        const handleGameDraw = (data: any) => {
+          // Game draw - show draw screen
+          setDraw(true);
+        };
+        
+        const handleNewGameStarted = (data: any) => {
+          // New game started - reset local state
+          setModalOpen(false);
+          setSearch("");
+          setActivePair(null);
+          setActiveCell(null);
+          setShowSuggestions(false);
+          setWinner(null);
+          setPendingWin(null);
+          setDraw(false);
+        };
+        
+        const handleGameFinished = (data: any) => {
+          // Series finished - will show final winner screen
+          setWinner(null);
+          setPendingWin(null);
+        };
+        
+        socket.on('gameStateUpdate', handleGameStateUpdate);
+        socket.on('cellClicked', handleCellClicked);
+        socket.on('answerResult', handleAnswerResult);
+        socket.on('gameWon', handleGameWon);
+        socket.on('showWinnerModal', handleShowWinnerModal);
+        socket.on('gameDraw', handleGameDraw);
+        socket.on('newGameStarted', handleNewGameStarted);
+        socket.on('gameFinished', handleGameFinished);
+        
+        return () => {
+          socket.off('gameReset', handleGameReset);
+          socket.off('gameStateUpdate', handleGameStateUpdate);
+          socket.off('cellClicked', handleCellClicked);
+          socket.off('answerResult', handleAnswerResult);
+          socket.off('gameWon', handleGameWon);
+          socket.off('showWinnerModal', handleShowWinnerModal);
+          socket.off('gameDraw', handleGameDraw);
+          socket.off('newGameStarted', handleNewGameStarted);
+          socket.off('gameFinished', handleGameFinished);
+        };
+      }, [isMultiplayer, socket, currentUserId, multiplayer, playersLoaded, allPlayers.length]); // Include all dependencies
+
+      // Multiplayer: Request game state on mount
+      useEffect(() => {
+        if (!isMultiplayer || !socket || !currentUserId || currentRoom) return;
+        
+        const requestGameState = () => {
+          if (socket?.connected && currentUserId) {
+            socket.emit('getGameState', { userId: currentUserId });
+          }
+        };
+        
+        if (socket?.connected) {
+          requestGameState();
+        } else {
+          const handleConnect = () => {
+            requestGameState();
+            socket?.off('connect', handleConnect);
+          };
+          socket?.on('connect', handleConnect);
+          setTimeout(requestGameState, 500);
+        }
+      }, [isMultiplayer, socket, currentUserId, currentRoom]);
+
+      useEffect(() => {
+        // Skip grid loading in multiplayer mode (grid comes from server)
+        if (isMultiplayer) return;
+        
         if (allPlayers.length === 0) return; // Don't load grid until players are loaded
         
         console.log(`🎯 Loading TicTacToe grid for league: ${league}`);
@@ -130,7 +362,7 @@
             setError(`Failed to load grid categories: ${err.response?.data?.message || err.message}`);
             setLoading(false);
           });
-      }, [league, allPlayers.length]); // Only depend on league and players count
+      }, [league, allPlayers.length, isMultiplayer]); // Only depend on league and players count
 
       // Real-time suggestions as user types
       useEffect(() => {
@@ -199,8 +431,9 @@
         console.log(`🔍 Filtered ${filteredPlayers.length} players for search: "${search}"`);
       }, [modalOpen, search, activePair, allPlayers]);
 
-      // Timer effect: start/reset on turn change, but only if dataReady
+      // Timer effect: start/reset on turn change, but only if dataReady (single-player only)
       useEffect(() => {
+        if (isMultiplayer) return; // Timer is handled by server in multiplayer
         if (!dataReady) return; // Don't start timer until data is ready
         setTurnTimer(20);
         if (timerRef.current) clearInterval(timerRef.current);
@@ -222,19 +455,157 @@
         return () => {
           if (timerRef.current) clearInterval(timerRef.current);
         };
-      }, [currentTurn, winner, draw, dataReady]);
+      }, [currentTurn, winner, draw, dataReady, isMultiplayer]);
+      
+      // Multiplayer: Update timer from server
+      useEffect(() => {
+        if (!isMultiplayer || mpTimer === undefined) return;
+        setTurnTimer(mpTimer);
+      }, [isMultiplayer, mpTimer]);
 
-      if (loading) {
+      // Multiplayer: Use multiplayer state
+      const displayTopCategories = isMultiplayer ? mpTopCategories : topCategories;
+      const displayLeftCategories = isMultiplayer ? mpLeftCategories : leftCategories;
+      const displayPairs = isMultiplayer ? mpPairs : pairs;
+      const displayCellStates = isMultiplayer ? (mpCellStates || cellStates) : cellStates;
+      const displayTurn = isMultiplayer ? (currentTurnSymbol || 'X') : currentTurn;
+      const displayTimer = isMultiplayer ? (mpTimer ?? 20) : turnTimer;
+      const displayGameWins = isMultiplayer ? mpGameWins : { player1: player1Wins, player2: player2Wins };
+      
+      // Multiplayer: Get player names for display
+      const player1Name = useMemo(() => {
+        if (!isMultiplayer || !currentRoom) return 'Player 1';
+        const player = currentRoom.players.find(p => (p as any)?.symbol === 'X');
+        return player?.username || 'Player 1';
+      }, [isMultiplayer, currentRoom]);
+      
+      const player2Name = useMemo(() => {
+        if (!isMultiplayer || !currentRoom) return 'Player 2';
+        const player = currentRoom.players.find(p => (p as any)?.symbol === 'O');
+        return player?.username || 'Player 2';
+      }, [isMultiplayer, currentRoom]);
+      
+      const player1WinsCount = isMultiplayer ? (displayGameWins[currentRoom?.players.find(p => (p as any)?.symbol === 'X')?.userId || ''] || 0) : player1Wins;
+      const player2WinsCount = isMultiplayer ? (displayGameWins[currentRoom?.players.find(p => (p as any)?.symbol === 'O')?.userId || ''] || 0) : player2Wins;
+      
+      // Get current game scores for multiplayer
+      const player1CurrentScore = isMultiplayer ? (mpScores[currentRoom?.players.find(p => (p as any)?.symbol === 'X')?.userId || ''] || 0) : player1Score;
+      const player2CurrentScore = isMultiplayer ? (mpScores[currentRoom?.players.find(p => (p as any)?.symbol === 'O')?.userId || ''] || 0) : player2Score;
+
+      // Multiplayer: Show winner screen if series is finished
+      if (isMultiplayer && mpIsFinished && mpSeriesWinner) {
+        const winnerName = currentRoom?.players.find(p => p.userId === mpSeriesWinner)?.username || 'Winner';
+        
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-gradient-to-b from-[#111827] to-black">
+            <h2 className="text-2xl font-bold">🎉 Game Over</h2>
+            
+            <div className="text-center">
+              <p className="text-lg text-white/80">
+                {mpSeriesWinner === currentUserId 
+                  ? '🏆 Congratulations! You won the series!' 
+                  : `🏆 Series Winner: ${winnerName}`}
+              </p>
+              {mpGameWins && mpSeriesWinner && (
+                <p className="text-sm text-white/60 mt-1">
+                  Final Score: {mpGameWins[mpSeriesWinner] || 0} wins
+                </p>
+              )}
+            </div>
+
+            {mpGameWins && Object.keys(mpGameWins).length > 0 && (
+              <div className="bg-white/10 rounded-lg p-4 mt-4">
+                <h3 className="text-lg font-bold mb-2">Final Scores</h3>
+                <div className="space-y-2">
+                  {currentRoom?.players.map((player) => (
+                    <div
+                      key={player.userId}
+                      className={`flex justify-between items-center p-2 rounded ${
+                        player.userId === mpSeriesWinner ? 'bg-yellow-500/20 border border-yellow-500' : 'bg-white/5'
+                      }`}
+                    >
+                      <span>{player.username}</span>
+                      <span className="font-bold">{mpGameWins[player.userId] || 0} wins</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4 mt-4">
+              <button
+                onClick={async () => {
+                  try {
+                    console.log('🔄 [Tictactoe] New Game button clicked - resetting game and removing all players...');
+                    if (mpResetGame) {
+                      await mpResetGame();
+                      // The gameReset event will handle redirect, but fallback here just in case
+                      setTimeout(() => {
+                        window.location.href = '/tictactoe-leagues';
+                      }, 500);
+                    } else {
+                      // Fallback if resetGame not available
+                      window.location.href = '/tictactoe-leagues';
+                    }
+                  } catch (error) {
+                    console.error('❌ Error resetting game:', error);
+                    // Redirect anyway
+                    window.location.href = '/tictactoe-leagues';
+                  }
+                }}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                New Game
+              </button>
+              <button
+                onClick={async () => {
+                  if (mpLeaveRoom) {
+                    await mpLeaveRoom();
+                  }
+                  window.location.href = '/';
+                }}
+                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                Back to Home
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // Multiplayer: Show loading if players aren't loaded yet
+      if (isMultiplayer && !playersLoaded) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
+            <h2 className="text-2xl font-bold text-[#ffd600]">Loading Players...</h2>
+            <p className="text-lg text-white/80">Please wait while we fetch all players for the game</p>
+          </div>
+        );
+      }
+      
+      if (loading && !isMultiplayer) {
         return <div className="min-h-screen flex items-center justify-center text-white">Loading categories...</div>;
       }
-      if (error || topCategories.length < 3 || leftCategories.length < 3) {
+      if ((error || displayTopCategories.length < 3 || displayLeftCategories.length < 3) && !isMultiplayer) {
         return <div className="min-h-screen flex items-center justify-center text-red-400">{error || "Not enough categories in DB (need at least 6)"}</div>;
+      }
+      
+      // Multiplayer: Show loading if game data isn't ready
+      if (isMultiplayer && (!mpTopCategories || mpTopCategories.length === 0 || !mpLeftCategories || mpLeftCategories.length === 0)) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
+            <h2 className="text-2xl font-bold text-[#ffd600]">Loading Game...</h2>
+            <p className="text-lg text-white/80">Setting up the game grid</p>
+          </div>
+        );
       }
 
       // Helper to find the pair object for a given cell
       function findPair(cat1: { name: string; slug: string; categoryId: number }, cat2: { name: string; slug: string; categoryId: number }) {
-        return pairs.find(
-          p => (p.categories[0] === cat1.name && p.categories[1] === cat2.name) ||
+        return displayPairs.find(
+          (p: { categories: string[]; players: string[] }) => (p.categories[0] === cat1.name && p.categories[1] === cat2.name) ||
                (p.categories[1] === cat1.name && p.categories[0] === cat2.name)
         );
       }
@@ -283,6 +654,65 @@
 
       // On cell click, open modal and store cell coordinates
       function handleCellClick(row: number, col: number) {
+        // Multiplayer: Use multiplayer click handler
+        if (isMultiplayer && clickTictactoeCell && mpIsMyTurn) {
+          // Check if players are loaded before allowing cell click
+          if (!playersLoaded || allPlayers.length === 0) {
+            console.error('❌ [Frontend] Players not loaded yet, cannot click cell');
+            return;
+          }
+          
+          const currentCells = mpCellStates || cellStates;
+          if (currentCells[row]?.[col]?.locked) {
+            console.log('❌ [Frontend] Cell is already locked:', { row, col });
+            return;
+          }
+          console.log('🎯 [Frontend] Clicking cell in multiplayer mode:', {
+            row,
+            col,
+            currentUserId,
+            hasClickTictactoeCell: !!clickTictactoeCell,
+            mpIsMyTurn,
+            playersLoaded,
+            playersCount: allPlayers.length,
+            socketId: socket?.id,
+            socketConnected: socket?.connected
+          });
+
+          // Try to open modal directly as fallback
+          const topCat = mpTopCategories[col];
+          const leftCat = mpLeftCategories[row];
+          if (topCat && leftCat && playersLoaded && allPlayers.length > 0) {
+            console.log('🔄 [Frontend] Opening modal directly as fallback');
+            // Find and log correct answers for multiplayer mode
+            console.log('🔍 [Frontend] Looking for pair:', {
+              topCat: topCat.name,
+              leftCat: leftCat.name,
+              mpPairsLength: mpPairs?.length || 0,
+              mpPairs: mpPairs
+            });
+            const pair = mpPairs?.find(
+              (p: { categories: string[]; players: string[] }) => 
+                (p.categories[0] === topCat.name && p.categories[1] === leftCat.name) ||
+                (p.categories[1] === topCat.name && p.categories[0] === leftCat.name)
+            );
+            if (pair) {
+              console.log('✅ Valid answers for', topCat.name, '+', leftCat.name, ':', pair.players);
+            } else {
+              console.log('❌ [Frontend] Pair not found for', topCat.name, '+', leftCat.name);
+            }
+            setModalOpen(true);
+            setActivePair([topCat.name, leftCat.name]);
+            setActiveCell({ row, col });
+            setSearch("");
+            setShowSuggestions(false);
+          }
+
+          clickTictactoeCell(row, col);
+          return;
+        }
+        
+        // Single-player mode
         if (cellStates[row][col].locked) return;
         const pair = findPair(topCategories[col], leftCategories[row]);
         if (pair) {
@@ -369,6 +799,59 @@
       function handlePlayerSelect(playerName: string) {
         if (!activePair || !activeCell) return;
         
+        // Multiplayer: Use multiplayer submit handler
+        if (isMultiplayer) {
+          console.log('🎮 [Frontend] handlePlayerSelect - multiplayer mode:', {
+            hasSubmitTictactoeAnswer: !!submitTictactoeAnswer,
+            mpIsMyTurn,
+            activeCell,
+            playerName
+          });
+          
+          if (!submitTictactoeAnswer) {
+            console.error('❌ [Frontend] submitTictactoeAnswer not available!');
+            return;
+          }
+          
+          // Always submit the answer - let backend handle turn validation
+          // This allows the player to see if their answer was correct even if turn changed
+          console.log('✅ [Frontend] Submitting answer in multiplayer mode:', { 
+            playerName, 
+            row: activeCell.row, 
+            col: activeCell.col,
+            isMyTurn: mpIsMyTurn
+          });
+          
+          // Store cell info in ref before clearing for comparison
+          const submittedCell = { row: activeCell.row, col: activeCell.col };
+          submittedCellRef.current = submittedCell;
+          
+          // Force close modal immediately using flushSync for synchronous updates
+          flushSync(() => {
+            setModalShouldClose(true);
+            setModalOpen(false);
+            setSearch("");
+            setActivePair(null);
+            setActiveCell(null);
+            setShowSuggestions(false);
+          });
+          
+          // Submit answer
+          submitTictactoeAnswer(playerName, submittedCell.row, submittedCell.col).then(() => {
+            // Clear cell ref after a delay to allow answer processing
+            setTimeout(() => {
+              submittedCellRef.current = null;
+              setModalShouldClose(false);
+            }, 2000);
+          }).catch(() => {
+            // Clear cell ref on error too
+            submittedCellRef.current = null;
+            setModalShouldClose(false);
+          });
+          return;
+        }
+        
+        // Single-player mode
         // Find valid answers for this cell from the grid data
         const pair = findPair(
           { name: activePair[0], slug: '', categoryId: 0 }, 
@@ -378,15 +861,27 @@
         // Check if the selected player is a correct answer
         const isCorrectAnswer = pair && pair.players.includes(playerName);
         
-        console.log(`🎯 Player "${playerName}" selected for ${activePair[0]} + ${activePair[1]}`);
-        console.log(`✅ Correct answers: [${pair?.players.join(', ') || 'None'}]`);
-        console.log(`🎮 Result: ${isCorrectAnswer ? 'CORRECT ✅' : 'WRONG ❌'}`);
+        // Store cell info before clearing
+        const cellInfo = { row: activeCell.row, col: activeCell.col };
+        
+        // Close modal immediately when answer is submitted using flushSync
+        flushSync(() => {
+          setModalShouldClose(true);
+          setModalOpen(false);
+          setSearch("");
+          setActivePair(null);
+          setActivePairJustifications(null);
+          setActiveCell(null);
+          setShowSuggestions(false);
+          setSuggestions([]);
+          setShowJustifications(false);
+        });
         
         if (isCorrectAnswer) {
           // Correct answer: lock cell, set image, set answer, alternate turn, increment score
           setCellStates(prev => {
             const newStates = prev.map(row => row.map(cell => ({ ...cell })));
-            newStates[activeCell.row][activeCell.col] = {
+            newStates[cellInfo.row][cellInfo.col] = {
               locked: true,
               image: currentTurn,
               answer: playerName
@@ -442,25 +937,9 @@
             return newStates;
           });
           setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
-          setModalOpen(false);
-          setSearch("");
-          setActivePair(null);
-          setActivePairJustifications(null);
-          setActiveCell(null);
-          setShowSuggestions(false);
-          setSuggestions([]);
-          setShowJustifications(false);
         } else {
-          // Wrong answer: close modal and skip turn
+          // Wrong answer: skip turn (modal already closed)
           setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
-          setModalOpen(false);
-          setSearch("");
-          setActivePair(null);
-          setActivePairJustifications(null);
-          setActiveCell(null);
-          setShowSuggestions(false);
-          setSuggestions([]);
-          setShowJustifications(false);
         }
       }
 
@@ -514,19 +993,25 @@
           <div className="w-full max-w-4xl flex items-center justify-between mb-8 px-2">
             <div className="flex items-center gap-4">
               <span className="bg-[#222] px-4 py-2 rounded text-sm font-bold flex items-center gap-2">
-                <span>PLAYER 1</span>
-                <span className="bg-green-700 px-2 py-1 rounded ml-2">{player1Wins}-{player2Wins}</span>
-                <span>PLAYER 2</span>
+                <span>{player1Name}</span>
+                <span className="bg-green-700 px-2 py-1 rounded ml-2">{player1CurrentScore}-{player2CurrentScore}</span>
+                <span>{player2Name}</span>
+                {isMultiplayer && (
+                  <span className="text-xs text-gray-400 ml-2">(Wins: {player1WinsCount}-{player2WinsCount})</span>
+                )}
               </span>
               <span className="bg-green-400 text-black font-bold px-3 py-1 rounded ml-2 min-w-[48px] text-lg flex items-center justify-center" style={{letterSpacing: '1px'}}>
-                {`0:${turnTimer.toString().padStart(2, '0')}`}
+                {`0:${displayTimer.toString().padStart(2, '0')}`}
               </span>
             </div>
             <div className="flex gap-4 items-center">
               <span className="bg-white text-black font-bold rounded px-4 py-2 text-sm border border-[#e5e7eb] shadow-sm" style={{minWidth: '110px', letterSpacing: '1px'}}>
-                {currentTurn === 'X' ? 'PLAYER 1 TURN' : 'PLAYER 2 TURN'}
+                {isMultiplayer 
+                  ? (mpIsMyTurn ? 'YOUR TURN' : `${currentRoom?.players.find(p => p.userId === mpCurrentTurnUserId)?.username || 'Waiting...'} TURN`)
+                  : (displayTurn === 'X' ? `${player1Name} TURN` : `${player2Name} TURN`)
+                }
               </span>
-              <span className="bg-red-500 px-4 py-2 rounded text-sm font-bold cursor-pointer" onClick={handleSkip}>SKIP</span>
+              <span className="bg-red-500 px-4 py-2 rounded text-sm font-bold cursor-pointer" onClick={isMultiplayer && mpIsMyTurn ? () => mpSkipTurn?.() : handleSkip}>SKIP</span>
               <button 
                 onClick={handleDrawRequest}
                 className="bg-orange-400 px-5 py-2 rounded text-sm font-bold cursor-pointer hover:bg-orange-500 transition-colors"
@@ -553,7 +1038,7 @@
                 />
                 <span className="text-sm text-white text-center font-semibold">KI-TAKA-TOE</span>
               </div>
-              {topCategories.map((cat, i) => (
+              {displayTopCategories.map((cat: { name: string; slug: string; categoryId: number }, i: number) => (
                 <div key={i} className="flex-1 flex flex-col items-center justify-center h-full px-1">
                   <Image
                     src={getCategoryIconPath(cat.categoryId)}
@@ -573,7 +1058,7 @@
               ))}
             </div>
             {/* 3 rows: each with left category and 3 grid boxes */}
-            {leftCategories.map((leftCat, row) => (
+            {displayLeftCategories.map((leftCat: { name: string; slug: string; categoryId: number }, row: number) => (
               <div key={row} className="flex items-center" style={{ minHeight: 120 }}>
                 <div className="w-[180px] flex flex-col items-center justify-center px-2">
                   <Image
@@ -591,14 +1076,14 @@
                     {leftCat.name}
                   </span>
                 </div>
-                {topCategories.map((topCat, col) => {
+                {displayTopCategories.map((topCat: { name: string; slug: string; categoryId: number }, col: number) => {
                   const pair = findPair(topCat, leftCat);
-                  const cell = cellStates[row][col];
+                  const cell = displayCellStates[row]?.[col] || { locked: false, image: null, answer: null };
                   return (
                     <div
                       key={col}
-                      className={`flex-1 flex flex-col items-center justify-center border-2 border-[#2e2e4d] rounded-none min-h-[80px] max-h-[100px] aspect-square transition text-base font-bold ${cell.locked ? 'bg-green-500 cursor-not-allowed' : 'bg-green-600 cursor-pointer hover:bg-green-700'}`}
-                      onClick={() => handleCellClick(row, col)}
+                      className={`flex-1 flex flex-col items-center justify-center border-2 border-[#2e2e4d] rounded-none min-h-[80px] max-h-[100px] aspect-square transition text-base font-bold ${cell.locked ? 'bg-green-500 cursor-not-allowed' : (isMultiplayer && !mpIsMyTurn ? 'bg-green-600 cursor-not-allowed opacity-50' : 'bg-green-600 cursor-pointer hover:bg-green-700')}`}
+                      onClick={() => !isMultiplayer || mpIsMyTurn ? handleCellClick(row, col) : undefined}
                     >
                       {cell.locked ? (
                         <>
@@ -633,7 +1118,7 @@
           </div>
 
           {/* Modal */}
-          {modalOpen && activePair && (
+          {modalOpen && !modalShouldClose && activePair && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
               <div className="bg-white text-black rounded-xl p-6 max-w-lg w-full shadow-2xl relative flex flex-col">
                 <h2 className="text-xl font-bold mb-2">Player Search</h2>
@@ -698,13 +1183,13 @@
                 {/* <div className="text-xs text-gray-500 mb-2">Player data was last updated on <b>5th Mar 2025</b></div> */}
                 <button
                   className="mt-2 bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
+                  onClick={() => { setModalShouldClose(true); setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
                 >
                   Cancel
                 </button>
                 <button
                   className="absolute top-2 right-4 text-2xl text-gray-400 hover:text-gray-700"
-                  onClick={() => { setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
+                  onClick={() => { setModalShouldClose(true); setModalOpen(false); setSearch(""); setActivePair(null); setActivePairJustifications(null); setActiveCell(null); setShowSuggestions(false); setSuggestions([]); setShowJustifications(false); }}
                   aria-label="Close modal"
                 >
                   &times;
@@ -718,6 +1203,19 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
               <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative flex flex-col items-center">
                 <h2 className="text-3xl font-bold mb-4">{winner} Wins!</h2>
+                {isMultiplayer && mpGameWins && (
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 mb-2">Current Series:</p>
+                    <div className="flex gap-4 justify-center">
+                      {currentRoom?.players.map((player) => (
+                        <div key={player.userId} className="text-center">
+                          <p className="font-semibold">{player.username}</p>
+                          <p className="text-lg">{mpGameWins[player.userId] || 0} wins</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p className="mb-6">A new game will start shortly...</p>
               </div>
             </div>
@@ -788,7 +1286,20 @@
     export default function TictactoePage() {
       return (
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Loading...</div>}>
-          <TictactoeGame />
+          <TictactoePageContent />
         </Suspense>
+      );
+    }
+    
+    function TictactoePageContent() {
+      const searchParams = useSearchParams();
+      const isMultiplayer = searchParams?.get('multiplayer') === 'true';
+      
+      // Always provide MultiplayerProvider so useMultiplayer hook can be called unconditionally
+      // The hook will be available but won't be used when isMultiplayer is false
+      return (
+        <MultiplayerProvider namespace="/tictactoe-multiplayer">
+          <TictactoeGame />
+        </MultiplayerProvider>
       );
     } 

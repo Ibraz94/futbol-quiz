@@ -104,6 +104,10 @@ interface MultiplayerContextType {
   // Team game methods
   submitTeamAnswer: (playerName: string, team1: string, team2: string) => Promise<void>;
   
+  // TicTacToe game methods
+  clickTictactoeCell: (row: number, col: number) => Promise<void>;
+  submitTictactoeAnswer: (playerName: string, row: number, col: number) => Promise<void>;
+  
   // Chat methods
   sendMessage: (message: string) => void;
   
@@ -894,6 +898,29 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     });
   };
 
+  const clickTictactoeCell = async (row: number, col: number): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot click cell: not connected or no room');
+    }
+    socketRef.current.emit('clickCell', {
+      userId: currentUserId,
+      row,
+      col,
+    });
+  };
+
+  const submitTictactoeAnswer = async (playerName: string, row: number, col: number): Promise<void> => {
+    if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
+      throw new Error('Cannot submit answer: not connected or no room');
+    }
+    socketRef.current.emit('submitAnswer', {
+      userId: currentUserId,
+      playerName: playerName?.trim(),
+      row,
+      col,
+    });
+  };
+
   const sendMessage = (message: string) => {
     if (!socketRef.current?.connected || !currentRoom) {
       return;
@@ -952,6 +979,8 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     submitAnswer,
     skipQuestion,
     submitTeamAnswer,
+    clickTictactoeCell,
+    submitTictactoeAnswer,
     sendMessage,
     error,
     clearError,
