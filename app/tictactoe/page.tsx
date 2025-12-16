@@ -45,6 +45,7 @@
   const [draw, setDraw] = useState(false);
     const [drawRequested, setDrawRequested] = useState<string | null>(null); // 'X' or 'O' who requested draw
   const [showDrawConfirmation, setShowDrawConfirmation] = useState(false);
+  const [isRedirectingAfterDraw, setIsRedirectingAfterDraw] = useState(false); // Track when redirecting after draw acceptance
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
   const [turnTimer, setTurnTimer] = useState(20);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -52,6 +53,8 @@
       const [pendingWin, setPendingWin] = useState<string | null>(null);
   const submittedCellRef = useRef<{ row: number; col: number } | null>(null);
   const [modalShouldClose, setModalShouldClose] = useState(false);
+  const isRedirectingRef = useRef(false); // Track if we're in the process of redirecting
+  const lastAnswerResultTimeRef = useRef<number>(0); // Track when we last received an answer result
   const router = useRouter();
   const searchParams = useSearchParams();
   const league = searchParams?.get('league') || 'bundesliga'; // Default to bundesliga if no league specified
@@ -88,6 +91,8 @@
       const mpWinnerUserId = mpGameState?.winner;
       const mpSeriesWinner = mpGameState?.seriesWinner;
       const mpCurrentGame = mpGameState?.currentGame || 1;
+      const mpDrawRequest = mpGameState?.drawRequest as any;
+      const mpIsDrawPending = !!mpDrawRequest && mpDrawRequest.status === 'pending';
       
       // Get current player's symbol
       const mySymbol = useMemo(() => {
@@ -142,9 +147,15 @@
         // CRITICAL: Listen for gameReset event FIRST - before ANY other logic
         // This MUST work even when showing game over screen, so it's at the very top
         const handleGameReset = (data: any) => {
+          console.log('[Tictactoe] gameReset event received, redirecting to lobby', data);
+          isRedirectingRef.current = true; // Set flag to prevent loading screens
+          setIsRedirectingAfterDraw(false); // Clear draw redirect state (redirect is happening)
           // Use window.location for immediate hard redirect - cannot be overridden
           // This ensures redirect happens even if component is showing game over screen
-          window.location.href = '/tictactoe-leagues';
+          // Small delay to ensure any pending state updates are processed
+          setTimeout(() => {
+            window.location.href = '/tictactoe-leagues';
+          }, 100);
         };
         
         socket.on('gameReset', handleGameReset);
@@ -153,6 +164,15 @@
         const handleGameStateUpdate = (data: any) => {
           if (data?.room) {
             // Room state is updated by context
+            // Check if room was reset to waiting state (draw accepted scenario)
+            if (data.room.status === 'waiting' && !data.room.gameState) {
+              console.log('[Tictactoe] gameStateUpdate detected room reset to waiting - will redirect');
+              isRedirectingRef.current = true; // Set flag to prevent loading screens
+              // Redirect after a brief delay to allow context to update
+              setTimeout(() => {
+                window.location.href = '/tictactoe-leagues';
+              }, 500);
+            }
           }
         };
         
@@ -199,6 +219,9 @@
             } else {
               console.log('❌ [Frontend] WRONG ANSWER');
             }
+            
+            // Record timestamp to prevent loading screen during state update
+            lastAnswerResultTimeRef.current = Date.now();
             
             // Ensure modal is closed after answer result (backup)
             setModalShouldClose(true);
@@ -247,6 +270,8 @@
         
         const handleNewGameStarted = (data: any) => {
           // New game started - reset local state
+          isRedirectingRef.current = false; // Reset redirect flag
+          setIsRedirectingAfterDraw(false); // Clear draw redirect state
           setModalOpen(false);
           setSearch("");
           setActivePair(null);
@@ -255,12 +280,60 @@
           setWinner(null);
           setPendingWin(null);
           setDraw(false);
+          setDrawRequested(null);
+          setShowDrawConfirmation(false);
         };
         
         const handleGameFinished = (data: any) => {
           // Series finished - will show final winner screen
           setWinner(null);
           setPendingWin(null);
+        };
+
+        const handleDrawRequested = (data: any) => {
+          const requestedBy: string | undefined = data?.requestedBy || data?.room?.gameState?.drawRequest?.requestedBy;
+          if (!requestedBy || !currentRoom) return;
+
+          const requesterPlayer = currentRoom.players.find(p => p.userId === requestedBy) as any;
+          const requesterSymbol = requesterPlayer?.symbol as 'X' | 'O' | null;
+
+          // Store who requested (by symbol) so we can show in confirmation text
+          if (requesterSymbol === 'X' || requesterSymbol === 'O') {
+            setDrawRequested(requesterSymbol);
+          } else {
+            setDrawRequested(null);
+          }
+
+          // If I'm the opponent, show confirmation modal
+          if (requestedBy !== currentUserId) {
+            setShowDrawConfirmation(true);
+          } else {
+            // I'm the requester - ensure confirmation modal is closed
+            setShowDrawConfirmation(false);
+          }
+        };
+
+        const handleDrawAccepted = (data: any) => {
+          // Draw accepted - backend will reset game and emit gameReset to redirect to lobby
+          console.log('[Tictactoe] Draw accepted, will redirect to lobby', data);
+          isRedirectingRef.current = true; // Set flag to prevent loading screens
+          setIsRedirectingAfterDraw(true); // Show redirecting screen
+          setShowDrawConfirmation(false);
+          setDrawRequested(null);
+          // Note: We don't set draw=true here because that shows "A new game will start shortly"
+          // Backend will emit gameReset after 2 seconds, but we also set a fallback timer
+          // Fallback redirect in case gameReset event doesn't fire
+          setTimeout(() => {
+            console.log('[Tictactoe] Fallback redirect after draw acceptance');
+            window.location.href = '/tictactoe-leagues';
+          }, 2500); // Slightly longer than backend's 2 second delay to let gameReset fire first
+        };
+
+        const handleDrawDeclined = (data: any) => {
+          // Draw declined - clear local draw state and continue game
+          setIsRedirectingAfterDraw(false); // Clear redirect state (draw was declined)
+          setShowDrawConfirmation(false);
+          setDrawRequested(null);
         };
         
         socket.on('gameStateUpdate', handleGameStateUpdate);
@@ -271,6 +344,9 @@
         socket.on('gameDraw', handleGameDraw);
         socket.on('newGameStarted', handleNewGameStarted);
         socket.on('gameFinished', handleGameFinished);
+        socket.on('drawRequested', handleDrawRequested);
+        socket.on('drawAccepted', handleDrawAccepted);
+        socket.on('drawDeclined', handleDrawDeclined);
         
         return () => {
           socket.off('gameReset', handleGameReset);
@@ -282,6 +358,9 @@
           socket.off('gameDraw', handleGameDraw);
           socket.off('newGameStarted', handleNewGameStarted);
           socket.off('gameFinished', handleGameFinished);
+          socket.off('drawRequested', handleDrawRequested);
+          socket.off('drawAccepted', handleDrawAccepted);
+          socket.off('drawDeclined', handleDrawDeclined);
         };
       }, [isMultiplayer, socket, currentUserId, multiplayer, playersLoaded, allPlayers.length]); // Include all dependencies
 
@@ -405,6 +484,38 @@
         
         console.log(`💡 Generated ${filteredSuggestions.length} suggestions for: "${search}"`);
       }, [search, allPlayers, modalOpen, activePair]);
+
+      // Reset modalShouldClose flag when modal closes
+      useEffect(() => {
+        if (!modalOpen) {
+          // Reset the close flag when modal is closed to allow it to open again
+          setModalShouldClose(false);
+        }
+      }, [modalOpen]);
+
+      // Multiplayer: Redirect to lobby if room is back to waiting state (handles draw acceptance, etc.)
+      // This is a fallback in case gameReset event doesn't fire or is missed
+      useEffect(() => {
+        if (isMultiplayer && currentRoom?.status === 'waiting') {
+          // Check if gameState is missing (was reset) - this indicates we should redirect
+          const hasNoGameState = !mpGameState || !currentRoom.gameState;
+          const wasPlaying = currentRoom.players.some((p: any) => p.symbol !== null); // Players had symbols = game was playing
+          
+          if (hasNoGameState && wasPlaying && currentRoom.players.length > 0) {
+            // Room was reset from playing state to waiting - redirect to lobby
+            console.log('[Tictactoe] Room reset detected - redirecting to lobby', {
+              status: currentRoom.status,
+              hasGameState: !!mpGameState,
+              playersCount: currentRoom.players.length
+            });
+            isRedirectingRef.current = true; // Set flag to prevent loading screens
+            const redirectTimer = setTimeout(() => {
+              window.location.href = '/tictactoe-leagues';
+            }, 500); // Reduced delay for faster redirect
+            return () => clearTimeout(redirectTimer);
+          }
+        }
+      }, [isMultiplayer, currentRoom?.status, mpGameState, currentRoom?.gameState, currentRoom?.players]);
 
       // Filter players for the modal when modal is open, activePair or search changes
       useEffect(() => {
@@ -584,6 +695,17 @@
         );
       }
       
+      // Show redirecting screen when draw is accepted (before any other checks)
+      if (isRedirectingAfterDraw) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
+            <h2 className="text-2xl font-bold text-[#ffd600]">Redirecting to lobby...</h2>
+            <p className="text-lg text-white/80">Draw accepted. Returning to lobby.</p>
+          </div>
+        );
+      }
+      
       if (loading && !isMultiplayer) {
         return <div className="min-h-screen flex items-center justify-center text-white">Loading categories...</div>;
       }
@@ -591,8 +713,35 @@
         return <div className="min-h-screen flex items-center justify-center text-red-400">{error || "Not enough categories in DB (need at least 6)"}</div>;
       }
       
-      // Multiplayer: Show loading if game data isn't ready
-      if (isMultiplayer && (!mpTopCategories || mpTopCategories.length === 0 || !mpLeftCategories || mpLeftCategories.length === 0)) {
+      // Multiplayer: If room is back to waiting state (lobby), show redirect message
+      // Also check if gameState was cleared (indicates reset/redirect scenario)
+      // Skip showing loading if we're already redirecting
+      const isRoomReset = isMultiplayer && currentRoom && !isRedirectingRef.current && (
+        currentRoom.status === 'waiting' && !mpGameState ||
+        (!mpGameState && currentRoom.players.some((p: any) => p.symbol !== null)) // Had symbols but gameState is gone = reset
+      );
+      
+      if (isRoomReset) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
+            <h2 className="text-2xl font-bold text-[#ffd600]">Returning to lobby...</h2>
+          </div>
+        );
+      }
+
+      // Multiplayer: Show loading if game data isn't ready (but room is still in playing/starting state)
+      // Only show this if we're NOT in a reset scenario (gameState exists but categories are loading)
+      // Skip if we're redirecting or if we just received an answer result (state is updating)
+      const timeSinceLastAnswer = Date.now() - lastAnswerResultTimeRef.current;
+      const justReceivedAnswer = timeSinceLastAnswer < 1000; // Within last 1 second
+      
+      if (isMultiplayer && 
+          !isRedirectingRef.current &&
+          !justReceivedAnswer && // Don't show loading immediately after answer result
+          (currentRoom?.status === 'playing' || currentRoom?.status === 'starting') && 
+          mpGameState && // Only show loading if gameState exists (not reset scenario)
+          (!mpTopCategories || mpTopCategories.length === 0 || !mpLeftCategories || mpLeftCategories.length === 0)) {
         return (
           <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
@@ -701,6 +850,7 @@
             } else {
               console.log('❌ [Frontend] Pair not found for', topCat.name, '+', leftCat.name);
             }
+            setModalShouldClose(false); // Reset close flag when opening modal
             setModalOpen(true);
             setActivePair([topCat.name, leftCat.name]);
             setActiveCell({ row, col });
@@ -719,6 +869,7 @@
           console.log('Valid answers for', topCategories[col].name, '+', leftCategories[row].name, ':', pair.players);
           console.log('Player justifications:', pair.playerJustifications);
         }
+        setModalShouldClose(false); // Reset close flag when opening modal
         setModalOpen(true);
         setActivePair([topCategories[col].name, leftCategories[row].name]);
         setActivePairJustifications(pair?.playerJustifications || null);
@@ -964,15 +1115,46 @@
       }
 
         // Handle draw request
-  function handleDrawRequest() {
-    setDrawRequested(currentTurn);
-    // Skip current player's turn and show draw request to other player
-    setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
-    setShowDrawConfirmation(true);
-  }
+      function handleDrawRequest() {
+        // Multiplayer: send draw request to server
+        if (isMultiplayer) {
+          if (!socket || !currentUserId) return;
+          if (!mpIsMyTurn) return;
+          if (mpIsDrawPending) return;
+
+          console.log('🎮 [Frontend] Requesting draw in multiplayer mode', {
+            userId: currentUserId,
+            roomId: currentRoom?.roomId,
+          });
+          socket.emit('requestDraw', { userId: currentUserId });
+          return;
+        }
+
+        // Single-player: local draw request between X and O
+        setDrawRequested(currentTurn);
+        // Skip current player's turn and show draw request to other player
+        setCurrentTurn(t => (t === 'X' ? 'O' : 'X'));
+        setShowDrawConfirmation(true);
+      }
 
   // Handle second player's draw confirmation
   function handleDrawConfirmation(confirmed: boolean) {
+    // Multiplayer: send response to server
+    if (isMultiplayer) {
+      if (!socket || !currentUserId) return;
+
+      console.log('🎮 [Frontend] Responding to draw request', {
+        userId: currentUserId,
+        accept: confirmed,
+      });
+      socket.emit('respondDraw', { userId: currentUserId, accept: confirmed });
+
+      // Close local confirmation; backend events will handle further UI
+      setShowDrawConfirmation(false);
+      return;
+    }
+
+    // Single-player behaviour
     setShowDrawConfirmation(false);
     setDrawRequested(null);
     
@@ -1011,10 +1193,39 @@
                   : (displayTurn === 'X' ? `${player1Name} TURN` : `${player2Name} TURN`)
                 }
               </span>
-              <span className="bg-red-500 px-4 py-2 rounded text-sm font-bold cursor-pointer" onClick={isMultiplayer && mpIsMyTurn ? () => mpSkipTurn?.() : handleSkip}>SKIP</span>
+              <span
+                className={`px-4 py-2 rounded text-sm font-bold ${
+                  isMultiplayer
+                    ? mpIsMyTurn
+                      ? 'bg-red-500 cursor-pointer hover:bg-red-600'
+                      : 'bg-red-500/60 cursor-not-allowed opacity-60'
+                    : 'bg-red-500 cursor-pointer hover:bg-red-600'
+                }`}
+                onClick={
+                  isMultiplayer
+                    ? mpIsMyTurn
+                      ? () => mpSkipTurn?.()
+                      : undefined
+                    : handleSkip
+                }
+              >
+                SKIP
+              </span>
               <button 
-                onClick={handleDrawRequest}
-                className="bg-orange-400 px-5 py-2 rounded text-sm font-bold cursor-pointer hover:bg-orange-500 transition-colors"
+                onClick={
+                  isMultiplayer
+                    ? (mpIsMyTurn && !mpIsDrawPending ? handleDrawRequest : undefined)
+                    : handleDrawRequest
+                }
+                className={
+                  isMultiplayer
+                    ? `px-5 py-2 rounded text-sm font-bold transition-colors ${
+                        mpIsMyTurn && !mpIsDrawPending
+                          ? 'bg-orange-400 cursor-pointer hover:bg-orange-500'
+                          : 'bg-orange-400/60 cursor-not-allowed opacity-60'
+                      }`
+                    : 'bg-orange-400 px-5 py-2 rounded text-sm font-bold cursor-pointer hover:bg-orange-500 transition-colors'
+                }
               >
                 REQUEST DRAW
               </button>
