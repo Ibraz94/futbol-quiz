@@ -297,8 +297,8 @@ const TicTacToeLeaguesPage: React.FC = () => {
                 <p className="text-white/70 text-sm">League: <span className="text-[#ffd600] font-mono">{selectedLeague}</span></p>
                 <p className="text-white/70 text-sm">Room ID: <span className="text-[#ffd600] font-mono">{currentRoom.roomId}</span></p>
                 <div className="flex items-center justify-center gap-2 mt-1">
-                  <p className="text-white/70 text-sm">Players: {currentRoom.players.length}/4</p>
-                  {currentRoom.players.length >= 4 && (
+                  <p className="text-white/70 text-sm">Players: {currentRoom.players.length}/{currentRoom.maxPlayers}</p>
+                  {currentRoom.players.length >= currentRoom.maxPlayers && (
                     <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30">
                       FULL
                     </span>
@@ -308,7 +308,7 @@ const TicTacToeLeaguesPage: React.FC = () => {
                 {currentRoom.players.length === 1 && (
                   <p className="text-[#ffd600] text-sm font-medium mt-2">🎯 You are the host! Wait for other players to join.</p>
                 )}
-                {currentRoom.players.length >= 4 && (
+                {currentRoom.players.length >= currentRoom.maxPlayers && (
                   <p className="text-red-400 text-sm font-medium mt-2">⚠️ Room is full! No more players can join.</p>
                 )}
               </div>
