@@ -45,7 +45,9 @@
   const [draw, setDraw] = useState(false);
     const [drawRequested, setDrawRequested] = useState<string | null>(null); // 'X' or 'O' who requested draw
   const [showDrawConfirmation, setShowDrawConfirmation] = useState(false);
-  const [isRedirectingAfterDraw, setIsRedirectingAfterDraw] = useState(false); // Track when redirecting after draw acceptance
+  const [showDrawRequestSent, setShowDrawRequestSent] = useState(false); // Show "waiting for response" modal for requester
+  const [showDrawAccepted, setShowDrawAccepted] = useState(false); // Show "draw accepted" popup for 5 seconds
+  const [legWinModal, setLegWinModal] = useState<{ playerName: string; winningAnswer: string; isCurrentUser: boolean } | null>(null); // Show leg win modal
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
   const [turnTimer, setTurnTimer] = useState(20);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -149,7 +151,7 @@
         const handleGameReset = (data: any) => {
           console.log('[Tictactoe] gameReset event received, redirecting to lobby', data);
           isRedirectingRef.current = true; // Set flag to prevent loading screens
-          setIsRedirectingAfterDraw(false); // Clear draw redirect state (redirect is happening)
+          setShowDrawAccepted(false); // Close draw accepted popup
           // Use window.location for immediate hard redirect - cannot be overridden
           // This ensures redirect happens even if component is showing game over screen
           // Small delay to ensure any pending state updates are processed
@@ -240,15 +242,55 @@
         };
         
         const handleGameWon = (data: any) => {
-          // Game won - show pending win (grid visible for 5 seconds)
-          if (data?.winner === currentUserId) {
-            setPendingWin('You');
+          // Game won - show leg win modal with winner and winning answer
+          // Use room from event data (data.room) as it's guaranteed to be up-to-date
+          const room = data?.room || multiplayer?.currentRoom;
+          const isCurrentUserWinner = data?.winner === currentUserId;
+          
+          let winnerName: string;
+          let winnerDisplayName: string; // For display in modal when current user lost
+          
+          if (isCurrentUserWinner) {
+            winnerName = 'You';
+            winnerDisplayName = 'You';
           } else {
-            // Get room from multiplayer context
-            const room = multiplayer?.currentRoom;
-            const winnerPlayer = room?.players.find(p => p.userId === data?.winner);
-            setPendingWin(winnerPlayer?.username || 'Winner');
+            // Get the winner's symbol from event data (most reliable) or from room
+            const winnerSymbol = data?.winnerSymbol || room?.players?.find((p: any) => p.userId === data?.winner)?.symbol;
+            
+            console.log('Winner symbol from event:', data?.winnerSymbol, 'from room:', room?.players?.find((p: any) => p.userId === data?.winner)?.symbol);
+            
+            // Determine Player 1 (X) or Player 2 (O) based on symbol
+            if (winnerSymbol === 'X') {
+              winnerDisplayName = 'Player 1';
+            } else if (winnerSymbol === 'O') {
+              winnerDisplayName = 'Player 2';
+            } else {
+              // Fallback: try to determine from player order (first player is X/Player 1, second is O/Player 2)
+              const players = room?.players || [];
+              const winnerIndex = players.findIndex((p: any) => p.userId === data?.winner);
+              if (winnerIndex === 0) {
+                winnerDisplayName = 'Player 1';
+              } else if (winnerIndex === 1) {
+                winnerDisplayName = 'Player 2';
+              } else {
+                // Final fallback to username
+                const winnerPlayer = room?.players?.find((p: any) => p.userId === data?.winner);
+                winnerDisplayName = winnerPlayer?.username || 'Winner';
+              }
+            }
+            
+            winnerName = winnerDisplayName;
           }
+          
+          // Show leg win modal with winner name and winning answer
+          setLegWinModal({
+            playerName: winnerDisplayName,
+            winningAnswer: data?.winningAnswer || 'Unknown',
+            isCurrentUser: isCurrentUserWinner
+          });
+          
+          // Also set pendingWin for the existing flow (grid visible for 5 seconds)
+          setPendingWin(winnerName);
         };
         
         const handleShowWinnerModal = (data: any) => {
@@ -271,7 +313,6 @@
         const handleNewGameStarted = (data: any) => {
           // New game started - reset local state
           isRedirectingRef.current = false; // Reset redirect flag
-          setIsRedirectingAfterDraw(false); // Clear draw redirect state
           setModalOpen(false);
           setSearch("");
           setActivePair(null);
@@ -282,12 +323,16 @@
           setDraw(false);
           setDrawRequested(null);
           setShowDrawConfirmation(false);
+          setShowDrawRequestSent(false);
+          setShowDrawAccepted(false);
+          setLegWinModal(null); // Close leg win modal when new game is loaded
         };
         
         const handleGameFinished = (data: any) => {
           // Series finished - will show final winner screen
           setWinner(null);
           setPendingWin(null);
+          setLegWinModal(null); // Close leg win modal when series ends
         };
 
         const handleDrawRequested = (data: any) => {
@@ -307,36 +352,57 @@
           // If I'm the opponent, show confirmation modal
           if (requestedBy !== currentUserId) {
             setShowDrawConfirmation(true);
+            setShowDrawRequestSent(false); // Ensure requester modal is closed
           } else {
-            // I'm the requester - ensure confirmation modal is closed
+            // I'm the requester - show "waiting for response" modal
             setShowDrawConfirmation(false);
+            setShowDrawRequestSent(true);
           }
         };
 
         const handleDrawAccepted = (data: any) => {
-          // Draw accepted - backend will reset game and emit gameReset to redirect to lobby
-          console.log('[Tictactoe] Draw accepted, will redirect to lobby', data);
-          isRedirectingRef.current = true; // Set flag to prevent loading screens
-          setIsRedirectingAfterDraw(true); // Show redirecting screen
+          // Draw accepted - show popup for 5 seconds, then redirect
+          console.log('[Tictactoe] Draw accepted, showing popup for 5 seconds', data);
           setShowDrawConfirmation(false);
+          setShowDrawRequestSent(false); // Close requester's waiting modal
           setDrawRequested(null);
-          // Note: We don't set draw=true here because that shows "A new game will start shortly"
-          // Backend will emit gameReset after 2 seconds, but we also set a fallback timer
-          // Fallback redirect in case gameReset event doesn't fire
+          setShowDrawAccepted(true); // Show "Draw Accepted" popup
+          
+          // Set timeout to close popup and redirect after 5 seconds (fallback if gameReset doesn't arrive)
           setTimeout(() => {
-            console.log('[Tictactoe] Fallback redirect after draw acceptance');
+            console.log('[Tictactoe] 5 seconds elapsed, closing popup and redirecting to lobby');
+            isRedirectingRef.current = true; // Set flag to prevent loading screens
+            setShowDrawAccepted(false); // Close draw accepted popup
             window.location.href = '/tictactoe-leagues';
-          }, 2500); // Slightly longer than backend's 2 second delay to let gameReset fire first
+          }, 5000); // 5 seconds
         };
 
         const handleDrawDeclined = (data: any) => {
           // Draw declined - clear local draw state and continue game
-          setIsRedirectingAfterDraw(false); // Clear redirect state (draw was declined)
           setShowDrawConfirmation(false);
+          setShowDrawRequestSent(false); // Close requester's waiting modal
           setDrawRequested(null);
         };
         
+        const handleTurnChanged = (data: any) => {
+          // Turn changed - close modal if it's no longer player's turn
+          if (isMultiplayer && modalOpen && currentUserId) {
+            const newCurrentTurnUserId = data?.room?.currentTurnUserId;
+            // If the current turn user is not me, close the modal
+            if (newCurrentTurnUserId !== currentUserId) {
+              console.log('[Tictactoe] Turn changed - closing answer modal');
+              setModalShouldClose(true);
+              setModalOpen(false);
+              setSearch("");
+              setActivePair(null);
+              setActiveCell(null);
+              setShowSuggestions(false);
+            }
+          }
+        };
+        
         socket.on('gameStateUpdate', handleGameStateUpdate);
+        socket.on('turnChanged', handleTurnChanged);
         socket.on('cellClicked', handleCellClicked);
         socket.on('answerResult', handleAnswerResult);
         socket.on('gameWon', handleGameWon);
@@ -351,6 +417,7 @@
         return () => {
           socket.off('gameReset', handleGameReset);
           socket.off('gameStateUpdate', handleGameStateUpdate);
+          socket.off('turnChanged', handleTurnChanged);
           socket.off('cellClicked', handleCellClicked);
           socket.off('answerResult', handleAnswerResult);
           socket.off('gameWon', handleGameWon);
@@ -574,6 +641,22 @@
         setTurnTimer(mpTimer);
       }, [isMultiplayer, mpTimer]);
 
+      // Multiplayer: Close modal when turn changes (timer expires or turn advances)
+      useEffect(() => {
+        if (!isMultiplayer) return;
+        
+        // If modal is open but it's no longer player's turn, close the modal
+        if (modalOpen && !mpIsMyTurn) {
+          console.log('[Tictactoe] Turn changed - closing answer modal (useEffect)');
+          setModalShouldClose(true);
+          setModalOpen(false);
+          setSearch("");
+          setActivePair(null);
+          setActiveCell(null);
+          setShowSuggestions(false);
+        }
+      }, [isMultiplayer, modalOpen, mpIsMyTurn]);
+
       // Multiplayer: Use multiplayer state
       const displayTopCategories = isMultiplayer ? mpTopCategories : topCategories;
       const displayLeftCategories = isMultiplayer ? mpLeftCategories : leftCategories;
@@ -691,17 +774,6 @@
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
             <h2 className="text-2xl font-bold text-[#ffd600]">Loading Players...</h2>
             <p className="text-lg text-white/80">Please wait while we fetch all players for the game</p>
-          </div>
-        );
-      }
-      
-      // Show redirecting screen when draw is accepted (before any other checks)
-      if (isRedirectingAfterDraw) {
-        return (
-          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#181A2A]">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-[#ffd600]"></div>
-            <h2 className="text-2xl font-bold text-[#ffd600]">Redirecting to lobby...</h2>
-            <p className="text-lg text-white/80">Draw accepted. Returning to lobby.</p>
           </div>
         );
       }
@@ -1176,11 +1248,8 @@
             <div className="flex items-center gap-4">
               <span className="bg-[#222] px-4 py-2 rounded text-sm font-bold flex items-center gap-2">
                 <span>{player1Name}</span>
-                <span className="bg-green-700 px-2 py-1 rounded ml-2">{player1CurrentScore}-{player2CurrentScore}</span>
+                <span className="bg-green-700 px-2 py-1 rounded ml-2">{player1WinsCount}-{player2WinsCount}</span>
                 <span>{player2Name}</span>
-                {isMultiplayer && (
-                  <span className="text-xs text-gray-400 ml-2">(Wins: {player1WinsCount}-{player2WinsCount})</span>
-                )}
               </span>
               <span className="bg-green-400 text-black font-bold px-3 py-1 rounded ml-2 min-w-[48px] text-lg flex items-center justify-center" style={{letterSpacing: '1px'}}>
                 {`0:${displayTimer.toString().padStart(2, '0')}`}
@@ -1441,7 +1510,7 @@
             </div>
           )}
 
-                {/* Draw Request Confirmation Modal */}
+                {/* Draw Request Confirmation Modal (for opponent) */}
       {showDrawConfirmation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
           <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
@@ -1462,6 +1531,56 @@
               >
                 No
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Draw Request Sent Modal (for requester) */}
+      {showDrawRequestSent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+            <h2 className="text-2xl font-bold mb-4">Draw Request Sent</h2>
+            <p className="mb-6">
+              Your draw request has been sent. Waiting for opponent's response...
+            </p>
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leg Win Modal (shown when a player wins a leg, stays until next game loads) */}
+      {legWinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+            <h2 className="text-3xl font-bold mb-4">🎉 Leg Won!</h2>
+            {legWinModal.isCurrentUser ? (
+              <p className="text-xl font-semibold mb-2 text-green-600">You Win This Leg!</p>
+            ) : (
+              <p className="text-xl font-semibold mb-2 text-green-600">{legWinModal.playerName} Wins This Leg!</p>
+            )}
+            <p className="text-sm text-gray-600 mb-4">Winning Answer:</p>
+            <p className="text-lg font-bold mb-6 bg-green-100 px-4 py-2 rounded">{legWinModal.winningAnswer}</p>
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+              <p className="ml-3 text-gray-600">Loading next round...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Draw Accepted Modal (shown for 5 seconds before redirect) */}
+      {showDrawAccepted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+            <h2 className="text-2xl font-bold mb-4">Draw Accepted</h2>
+            <p className="mb-6">
+              Both players have agreed to a draw. Redirecting to lobby screen...
+            </p>
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
             </div>
           </div>
         </div>
