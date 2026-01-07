@@ -44,6 +44,20 @@ function TeamsPageContent() {
     };
   }, [socket]);
 
+  // Listen for opponent disconnect event
+  useEffect(() => {
+    const handleOpponentDisconnected = (event: CustomEvent) => {
+      const { disconnectedPlayer, winner } = event.detail;
+      const isMe = winner === currentUserId;
+      if (isMe) {
+        setWonByDisconnect(true);
+      }
+    };
+
+    window.addEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+    return () => window.removeEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+  }, [currentUserId]);
+
   // Track currentRoom changes
   useEffect(() => {
     // Room state updated
@@ -118,6 +132,7 @@ function TeamsPageContent() {
   const [isResettingGame, setIsResettingGame] = useState<boolean>(false);
   const [isStartingNewGameFromWinner, setIsStartingNewGameFromWinner] = useState<boolean>(false);
   const [isLeavingRoom, setIsLeavingRoom] = useState<boolean>(false);
+  const [wonByDisconnect, setWonByDisconnect] = useState<boolean>(false);
 
   // Handler functions for winner modal
   const startNewGame = async (): Promise<void> => {
@@ -188,7 +203,9 @@ function TeamsPageContent() {
         <div className="text-center">
           <p className="text-lg text-white/80">
             {winnerUserId === currentUserId ? 
-              '🏆 Congratulations! You won!' : 
+              (wonByDisconnect 
+                ? '🏆 Congratulations! You won due to other player disconnecting mid game!' 
+                : '🏆 Congratulations! You won!') : 
               `🏆 Winner: ${winnerName || 'Unknown'}`
             }
           </p>

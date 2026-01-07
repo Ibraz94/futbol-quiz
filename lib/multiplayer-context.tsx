@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { WS_BASE_URL } from './config';
+import { getValidAccessToken, isTokenFullyExpired, clearAuthTokens } from './token-utils';
 
 export interface Player {
   userId: string;
@@ -116,7 +117,7 @@ interface MultiplayerContextType {
   clearError: () => void;
 }
 
-const MultiplayerContext = createContext<MultiplayerContextType | null>(null);
+export const MultiplayerContext = createContext<MultiplayerContextType | null>(null);
 
 export const useMultiplayer = () => {
   const context = useContext(MultiplayerContext);
@@ -152,6 +153,31 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       if (prevStr === nextStr) {
         return prevRoom;
       }
+      
+      // Store game state in localStorage for global access (e.g., navigation components)
+      if (typeof window !== 'undefined') {
+        if (nextRoom) {
+          // Check if game is in progress - include 'starting' status as well since game is about to start
+          const isGameInProgress = nextRoom.status === 'playing' || 
+                                  nextRoom.status === 'starting' ||
+                                  (nextRoom.gameState as any)?.gamePhase === 'playing' ||
+                                  (nextRoom.gameState as any)?.gamePhase === 'starting';
+          localStorage.setItem('mp_gameInProgress', isGameInProgress ? 'true' : 'false');
+          localStorage.setItem('mp_currentRoomId', nextRoom.roomId || '');
+          // Dispatch custom event for components outside the provider
+          window.dispatchEvent(new CustomEvent('mp_gameStateChanged', { 
+            detail: { isGameInProgress, roomId: nextRoom.roomId } 
+          }));
+        } else {
+          localStorage.removeItem('mp_gameInProgress');
+          localStorage.removeItem('mp_currentRoomId');
+          // Dispatch event when game ends
+          window.dispatchEvent(new CustomEvent('mp_gameStateChanged', { 
+            detail: { isGameInProgress: false, roomId: null } 
+          }));
+        }
+      }
+      
       return nextRoom;
     });
   }, [namespace]);
@@ -230,7 +256,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       'cellClicked','gameEnded','gameReset','gameStateUpdate','wildcardUsed','playerChanged',
       'turnChanged','timeoutWarning','turnTimeout','gameFinished','timerUpdate','answerResult',
       'playerReconnected','forceLeaveSuccess','answerSubmitted','questionSkipped','questionChanged',
-      'scoreUpdated','quizGameEnded','validPlayersForTeams','error'
+      'scoreUpdated','quizGameEnded','validPlayersForTeams','opponentDisconnected','error'
     ].forEach(off);
 
     sock.on('roomJoined', (data) => {
@@ -328,6 +354,14 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
           winner: data.room.gameState?.winner
         });
         setCurrentRoom(data.room);
+        // Dispatch custom event for game pages to listen to
+        window.dispatchEvent(new CustomEvent('gameFinished', {
+          detail: {
+            room: data.room,
+            reason: data.reason,
+            winner: data.winner
+          }
+        }));
       } else {
         console.warn('⚠️ [attachListeners] gameFinished event missing room data:', data);
       }
@@ -341,10 +375,24 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     sock.on('questionChanged', (data) => setCurrentRoom(prev => prev ? data.room : null));
     sock.on('scoreUpdated', (data) => setCurrentRoom(prev => prev ? data.room : null));
     sock.on('quizGameEnded', (data) => setCurrentRoom(prev => prev ? data.room : null));
+    sock.on('opponentDisconnected', (data) => {
+      console.log('⚠️ Opponent disconnected during game:', data);
+      if (data?.room) {
+        setCurrentRoom(data.room);
+        // Dispatch custom event for game pages to listen to
+        window.dispatchEvent(new CustomEvent('opponentDisconnected', {
+          detail: {
+            disconnectedPlayer: data.disconnectedPlayer,
+            winner: data.winner,
+            room: data.room
+          }
+        }));
+      }
+    });
     sock.on('error', (data) => { console.error('❌ Multiplayer error:', data.message); setError(data.message); });
   }, [setCurrentRoom]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     // Validate and normalize namespace
     if (!namespace || typeof namespace !== 'string') {
       console.error('❌ Invalid namespace in connect:', namespace);
@@ -388,10 +436,26 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       return;
     }
     
-    // Check if user is authenticated
-    const token = localStorage.getItem('access_token');
+    // Check if user is authenticated and refresh token if needed
+    let token = await getValidAccessToken();
+    
     if (!token) {
-      setError('Authentication required. Please log in first.');
+      // Check if token is fully expired (no refresh token available)
+      const storedToken = localStorage.getItem('access_token');
+      if (storedToken && isTokenFullyExpired(storedToken)) {
+        // Token expired and refresh failed - clear tokens and show error
+        clearAuthTokens();
+        setError('Your session has expired. Please log in again.');
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login?expired=true';
+          }
+        }, 2000);
+      } else {
+        setError('Authentication required. Please log in first.');
+      }
+      isConnectingRef.current = false;
       return;
     }
     
@@ -471,7 +535,7 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     newSocket.on('connected', () => {
     });
 
-    newSocket.on('connect_error', (error: any) => {
+    newSocket.on('connect_error', async (error: any) => {
       console.error('❌ Connection error:', error.message);
       console.error('❌ Connection error details:', {
         message: error.message,
@@ -483,7 +547,33 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
         socketUrl,
         normalizedNamespace
       });
-      setError(`Connection failed: ${error.message}`);
+      
+      // If error is related to authentication, try refreshing token
+      if (error.message?.includes('token') || error.message?.includes('auth') || error.message?.includes('Unauthorized')) {
+        console.log('🔄 Authentication error detected, attempting token refresh...');
+        const refreshedToken = await getValidAccessToken();
+        
+        if (refreshedToken) {
+          console.log('✅ Token refreshed, retrying connection...');
+          // Retry connection with new token
+          setTimeout(() => {
+            connect();
+          }, 500);
+          return;
+        } else {
+          // Refresh failed, clear tokens and redirect
+          clearAuthTokens();
+          setError('Your session has expired. Please log in again.');
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login?expired=true';
+            }
+          }, 2000);
+        }
+      } else {
+        setError(`Connection failed: ${error.message}`);
+      }
+      
       setIsConnected(false);
       isConnectingRef.current = false;
     });
@@ -692,6 +782,17 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
   }, [currentRoom, currentUserId]);
 
   const joinLobby = async (userId: string, username: string, league?: string) => {
+    // Ensure we have a valid token before connecting
+    let token = await getValidAccessToken();
+    if (!token) {
+      const storedToken = localStorage.getItem('access_token');
+      if (storedToken && isTokenFullyExpired(storedToken)) {
+        clearAuthTokens();
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      throw new Error('Authentication required. Please log in first.');
+    }
+    
     // Ensure connection; do NOT disconnect if already connected
     if (!socketRef.current?.connected) {
       connect();
@@ -701,12 +802,6 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       }
     } else {
       console.log('🔌 Already connected, skipping connection attempt');
-    }
-    
-    // Check if user is authenticated
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      throw new Error('Authentication required. Please log in first.');
     }
     
     setCurrentUserId(userId);
@@ -749,6 +844,15 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
   };
 
   const leaveRoom = async () => {
+    // Clear localStorage regardless of connection state
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('mp_gameInProgress');
+      localStorage.removeItem('mp_currentRoomId');
+      window.dispatchEvent(new CustomEvent('mp_gameStateChanged', { 
+        detail: { isGameInProgress: false, roomId: null } 
+      }));
+    }
+    
     if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
       return;
     }

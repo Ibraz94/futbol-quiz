@@ -26,6 +26,7 @@ function PlayPageContent() {
   const [isResettingGame, setIsResettingGame] = useState<boolean>(false);
   const [isStartingNewGameFromWinner, setIsStartingNewGameFromWinner] = useState<boolean>(false);
   const [isLeavingRoom, setIsLeavingRoom] = useState<boolean>(false);
+  const [wonByDisconnect, setWonByDisconnect] = useState<boolean>(false);
   const hasRequestedGameState = useRef(false);
 
   // CRITICAL: Listen for gameReset event FIRST - before ANY other logic
@@ -294,7 +295,9 @@ function PlayPageContent() {
         <div className="text-center">
           <p className="text-lg text-white/80">
             {winnerUserId === currentUserId ? 
-              '🏆 Congratulations! You won!' : 
+              (wonByDisconnect 
+                ? '🏆 Congratulations! You won due to other player disconnecting mid game!' 
+                : '🏆 Congratulations! You won!') : 
               `🏆 Winner: ${winnerName || 'Unknown'}`
             }
           </p>

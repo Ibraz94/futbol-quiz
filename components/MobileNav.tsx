@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { CiMenuFries } from "react-icons/ci";
 import Image from "next/image";
+import GameAwareLink from "./GameAwareLink";
 
 const links = [
   {
@@ -55,7 +56,7 @@ const MobileNav = () => {
         <nav className="flex flex-col justify-center items-center gap-4 sm:gap-6 lg:gap-8 flex-1">
           {links.map((link, index) => {
             return (
-              <Link 
+              <GameAwareLink 
                 href={link.path} 
                 key={index}
                 className={`${link.path === pathname && "text-accent border-b-2 border-accent"}
@@ -64,7 +65,7 @@ const MobileNav = () => {
                       border-b border-transparent hover:border-accent/20`}
               >
                 {link.name}
-              </Link>
+              </GameAwareLink>
             );
           })}
         </nav>

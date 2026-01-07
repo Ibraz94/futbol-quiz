@@ -1,14 +1,22 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { API_BASE_URL } from "../../lib/config";
 
-const Login: React.FC = () => {
+const LoginForm: React.FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  
+  // Check if redirected due to expired session
+  useEffect(() => {
+    if (searchParams?.get('expired') === 'true') {
+      setError('Your session has expired. Please log in again.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +42,12 @@ const Login: React.FC = () => {
 
       const data = await res.json();
       localStorage.setItem("access_token", data.access_token);
+      
+      // Store refresh token if provided
+      if (data.refresh_token) {
+        localStorage.setItem("refresh_token", data.refresh_token);
+      }
+      
       window.dispatchEvent(new Event("storage"));
       // alert("Login successful!");
       router.push("/");
@@ -125,6 +139,18 @@ const Login: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Login: React.FC = () => {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-[#181c24] to-[#10131a]">
+        <div className="text-white">Loading...</div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 };
 

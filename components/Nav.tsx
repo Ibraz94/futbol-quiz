@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import GameAwareLink from "./GameAwareLink";
 
 const links = [
   {
@@ -29,11 +30,15 @@ const Nav = () => {
     <nav className="flex gap-10">  
       {links.map((link, index) => {
         return (
-          <Link href={link.path} key={index} className={`${link.path === pathname &&
-            "text-accent border-accent"
-            }capitalize font-semibold text-sm hover:text-accent transition-all`}>
+          <GameAwareLink 
+            href={link.path} 
+            key={index} 
+            className={`${link.path === pathname &&
+              "text-accent border-accent"
+              }capitalize font-semibold text-sm hover:text-accent transition-all`}
+          >
             {link.name}
-          </Link>
+          </GameAwareLink>
         );
       })}
 

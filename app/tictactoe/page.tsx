@@ -49,14 +49,32 @@
   const [showDrawAccepted, setShowDrawAccepted] = useState(false); // Show "draw accepted" popup for 5 seconds
   const [legWinModal, setLegWinModal] = useState<{ playerName: string; winningAnswer: string; isCurrentUser: boolean } | null>(null); // Show leg win modal
   const [showSkipConfirmation, setShowSkipConfirmation] = useState(false);
+  const [showOpponentLeftModal, setShowOpponentLeftModal] = useState<boolean>(false);
+  const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string>('');
+  const [isWinner, setIsWinner] = useState<boolean>(false);
+  const [wonByDisconnect, setWonByDisconnect] = useState<boolean>(false);
+  const wonByDisconnectRef = useRef<boolean>(false); // Use ref to persist across renders
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState<boolean>(false);
   const [turnTimer, setTurnTimer] = useState(20);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [dataReady, setDataReady] = useState(false);
+  // Rematch feature state
+  const [rematchCountdown, setRematchCountdown] = useState<number>(0);
+  const [rematchRequested, setRematchRequested] = useState<boolean>(false);
+  const [rematchAvailable, setRematchAvailable] = useState<boolean>(false);
+  const [showRematchModal, setShowRematchModal] = useState<boolean>(false);
+  const [rematchRequesterName, setRematchRequesterName] = useState<string>('');
+  const rematchCountdownRef = useRef<NodeJS.Timeout | null>(null);
+  const rematchRequestPendingRef = useRef<boolean>(false); // Track if rematch request is pending to prevent state resets
+  const rematchExpiredRef = useRef<boolean>(false); // Track if rematch countdown has expired to prevent resetting
+  const rematchCountdownWhenRequestedRef = useRef<number>(0); // Store countdown value when rematch was requested
       const [pendingWin, setPendingWin] = useState<string | null>(null);
   const submittedCellRef = useRef<{ row: number; col: number } | null>(null);
   const [modalShouldClose, setModalShouldClose] = useState(false);
   const isRedirectingRef = useRef(false); // Track if we're in the process of redirecting
   const lastAnswerResultTimeRef = useRef<number>(0); // Track when we last received an answer result
+  const waitingForNewGridRef = useRef(false); // Track if we're waiting for new grid after draw acceptance
+  const previousGridCategoriesRef = useRef<{ top: string[]; left: string[] } | null>(null); // Track previous grid to detect changes
   const router = useRouter();
   const searchParams = useSearchParams();
   const league = searchParams?.get('league') || 'bundesliga'; // Default to bundesliga if no league specified
@@ -142,6 +160,66 @@
         fetchAllPlayers();
       }, []);
 
+      // Handle browser tab/window close and navigation away
+      useEffect(() => {
+        if (!isMultiplayer || !currentRoom) return;
+
+        const isGameInProgress = currentRoom.status === 'playing' || 
+                                 (mpGameState?.gamePhase === 'playing' && !mpIsFinished);
+
+        if (!isGameInProgress) return;
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+          // Don't show warning if we're redirecting (e.g., draw accepted, game reset)
+          if (isRedirectingRef.current) {
+            return; // Allow navigation without warning
+          }
+          e.preventDefault();
+          e.returnValue = ''; // Chrome requires returnValue to be set
+          return ''; // Some browsers require return value
+        };
+
+        const handlePopState = (e: PopStateEvent) => {
+          // Don't show warning if we're redirecting (e.g., draw accepted, game reset)
+          if (isRedirectingRef.current) {
+            return; // Allow navigation without warning
+          }
+          
+          const stillInProgress = currentRoom.status === 'playing' || 
+                                  (mpGameState?.gamePhase === 'playing' && !mpIsFinished);
+          if (stillInProgress) {
+            e.preventDefault();
+            setShowLeaveConfirmation(true);
+            // Push state back to prevent navigation
+            window.history.pushState(null, '', window.location.href);
+          }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        // Push initial state to track navigation
+        window.history.pushState(null, '', window.location.href);
+        window.addEventListener('popstate', handlePopState);
+
+        return () => {
+          window.removeEventListener('beforeunload', handleBeforeUnload);
+          window.removeEventListener('popstate', handlePopState);
+        };
+      }, [isMultiplayer, currentRoom, mpGameState?.gamePhase, mpIsFinished]);
+
+      // Listen for forced leave room requests from navigation (when context not available)
+      useEffect(() => {
+        if (!isMultiplayer || !mpLeaveRoom) return;
+        
+        const handleForceLeave = (event: CustomEvent) => {
+          if (mpLeaveRoom) {
+            mpLeaveRoom();
+          }
+        };
+        
+        window.addEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+        return () => window.removeEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+      }, [isMultiplayer, mpLeaveRoom]);
+
       // Multiplayer: Listen for game state updates
       useEffect(() => {
         if (!isMultiplayer || !socket || !currentUserId) return;
@@ -149,7 +227,6 @@
         // CRITICAL: Listen for gameReset event FIRST - before ANY other logic
         // This MUST work even when showing game over screen, so it's at the very top
         const handleGameReset = (data: any) => {
-          console.log('[Tictactoe] gameReset event received, redirecting to lobby', data);
           isRedirectingRef.current = true; // Set flag to prevent loading screens
           setShowDrawAccepted(false); // Close draw accepted popup
           // Use window.location for immediate hard redirect - cannot be overridden
@@ -166,14 +243,43 @@
         const handleGameStateUpdate = (data: any) => {
           if (data?.room) {
             // Room state is updated by context
-            // Check if room was reset to waiting state (draw accepted scenario)
+            // Check if room was reset to waiting state (old draw behavior - redirect to lobby)
             if (data.room.status === 'waiting' && !data.room.gameState) {
-              console.log('[Tictactoe] gameStateUpdate detected room reset to waiting - will redirect');
               isRedirectingRef.current = true; // Set flag to prevent loading screens
               // Redirect after a brief delay to allow context to update
               setTimeout(() => {
                 window.location.href = '/tictactoe-leagues';
               }, 500);
+            }
+            
+            // Check if new grid was loaded after draw (drawAccepted was shown)
+            if (waitingForNewGridRef.current && data.room.gameState && data.room.status === 'playing') {
+              const currentTopCategories = data.room.gameState.topCategories?.map((c: any) => c.slug || c.name).join(',') || '';
+              const currentLeftCategories = data.room.gameState.leftCategories?.map((c: any) => c.slug || c.name).join(',') || '';
+              const prevTopCategories = previousGridCategoriesRef.current?.top.join(',') || '';
+              const prevLeftCategories = previousGridCategoriesRef.current?.left.join(',') || '';
+              
+              // Check if grid has changed (categories are different) or drawRequest is cleared
+              const gridChanged = (currentTopCategories !== prevTopCategories || currentLeftCategories !== prevLeftCategories);
+              const drawRequestCleared = !data.room.gameState.drawRequest;
+              
+              if (gridChanged || drawRequestCleared) {
+                // New grid loaded - close the loading modal
+                waitingForNewGridRef.current = false; // Clear the flag
+                setShowDrawAccepted(false);
+                // Update previous grid reference
+                previousGridCategoriesRef.current = {
+                  top: data.room.gameState.topCategories?.map((c: any) => c.slug || c.name) || [],
+                  left: data.room.gameState.leftCategories?.map((c: any) => c.slug || c.name) || []
+                };
+                console.log('[Draw] New grid loaded, closing loading modal');
+              }
+            } else if (data.room.gameState && data.room.status === 'playing') {
+              // Update previous grid reference even if not waiting (for future comparisons)
+              previousGridCategoriesRef.current = {
+                top: data.room.gameState.topCategories?.map((c: any) => c.slug || c.name) || [],
+                left: data.room.gameState.leftCategories?.map((c: any) => c.slug || c.name) || []
+              };
             }
           }
         };
@@ -192,16 +298,9 @@
             // Check if this is the same cell we just submitted an answer for
             const isSameCell = submittedCellRef.current?.row === data.row && submittedCellRef.current?.col === data.col;
             if (isSameCell) {
-              console.log('⚠️ [Frontend] Ignoring cellClicked - answer already submitted for this cell');
               return;
             }
             
-            console.log('✅ [Frontend] Opening modal for cell:', { 
-              row: data.row, 
-              col: data.col,
-              playersLoaded,
-              playersCount: allPlayers.length
-            });
             setModalShouldClose(false); // Reset close flag
             setModalOpen(true);
             setActivePair([data.topCategory?.name, data.leftCategory?.name]);
@@ -213,14 +312,6 @@
         
         const handleAnswerResult = (data: any) => {
           if (data?.userId && data?.correct !== undefined) {
-            // Log answer result (without revealing correct answers to prevent cheating)
-            if (data.notYourTurn) {
-              console.log('⚠️ [Frontend] Answer submitted out of turn');
-            } else if (data.correct) {
-              console.log('✅ [Frontend] CORRECT ANSWER');
-            } else {
-              console.log('❌ [Frontend] WRONG ANSWER');
-            }
             
             // Record timestamp to prevent loading screen during state update
             lastAnswerResultTimeRef.current = Date.now();
@@ -325,22 +416,94 @@
           setShowDrawConfirmation(false);
           setShowDrawRequestSent(false);
           setShowDrawAccepted(false);
+          waitingForNewGridRef.current = false; // Clear the flag when new game starts
           setLegWinModal(null); // Close leg win modal when new game is loaded
+          // Reset rematch state
+          rematchRequestPendingRef.current = false; // Clear ref
+          rematchExpiredRef.current = false; // Reset expired flag for new game
+          rematchCountdownWhenRequestedRef.current = 0; // Reset stored countdown value
+          setRematchRequested(false);
+          setRematchAvailable(false);
+          setRematchCountdown(0);
+          setShowRematchModal(false);
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+          setWonByDisconnect(false); // Reset disconnect win flag
+          wonByDisconnectRef.current = false; // Reset ref as well
         };
         
         const handleGameFinished = (data: any) => {
+          console.log('[Rematch] handleGameFinished called. Current showRematchModal:', showRematchModal);
           // Series finished - will show final winner screen
           setWinner(null);
           setPendingWin(null);
           setLegWinModal(null); // Close leg win modal when series ends
+          
+          // Check if game finished due to opponent disconnect
+          if (data?.reason === 'opponent_left') {
+            const winner = data?.winner || data?.room?.gameState?.seriesWinner || data?.room?.gameState?.winner;
+            if (winner === currentUserId) {
+              setWonByDisconnect(true);
+              wonByDisconnectRef.current = true;
+            }
+          }
+          
+          // Start rematch countdown timer (20 seconds)
+          // Use data.room if available, otherwise fallback to currentRoom from context
+          const room = data?.room || currentRoom;
+          if (room && room.players && room.players.length >= 2) {
+            console.log('[Rematch] Starting rematch countdown timer. Players:', room.players.length);
+            // CRITICAL: Check ref FIRST - if rematch request is pending, don't touch modal state
+            if (rematchRequestPendingRef.current) {
+              console.log('[Rematch] handleGameFinished - rematch request pending, preserving modal state');
+              // Still set rematchAvailable and countdown
+              setRematchAvailable(true);
+              setRematchCountdown(20);
+            } else {
+              // Use functional update to check current state
+              setShowRematchModal((currentModalState) => {
+                console.log('[Rematch] handleGameFinished - current modal state:', currentModalState);
+                // Don't reset rematchRequested if modal is showing
+                if (!currentModalState) {
+                  setRematchRequested(false);
+                }
+                // Return current state to preserve it if modal is showing
+                return currentModalState;
+              });
+              setRematchAvailable(true);
+              setRematchCountdown(20);
+            }
+          } else {
+            console.log('[Rematch] Cannot start rematch - room or players not available:', { 
+              hasRoom: !!room, 
+              playersCount: room?.players?.length || 0 
+            });
+          }
         };
 
         const handleDrawRequested = (data: any) => {
+          console.log('[Draw] ===== drawRequested event received =====');
+          console.log('[Draw] Event data:', JSON.stringify(data, null, 2));
+          console.log('[Draw] Current userId:', currentUserId);
+          console.log('[Draw] Current room from context:', currentRoom);
+          
           const requestedBy: string | undefined = data?.requestedBy || data?.room?.gameState?.drawRequest?.requestedBy;
-          if (!requestedBy || !currentRoom) return;
+          console.log('[Draw] Requested by:', requestedBy);
+          
+          // Use room from event data as fallback if currentRoom from context is not available
+          const room = data?.room || currentRoom;
+          console.log('[Draw] Using room:', room ? 'from event data' : 'from context');
+          
+          if (!requestedBy || !room) {
+            console.log('[Draw] Missing requestedBy or room, returning. requestedBy:', requestedBy, 'room:', room);
+            return;
+          }
 
-          const requesterPlayer = currentRoom.players.find(p => p.userId === requestedBy) as any;
+          const requesterPlayer = room.players.find((p: any) => p.userId === requestedBy) as any;
           const requesterSymbol = requesterPlayer?.symbol as 'X' | 'O' | null;
+          console.log('[Draw] Requester symbol:', requesterSymbol);
 
           // Store who requested (by symbol) so we can show in confirmation text
           if (requesterSymbol === 'X' || requesterSymbol === 'O') {
@@ -351,30 +514,47 @@
 
           // If I'm the opponent, show confirmation modal
           if (requestedBy !== currentUserId) {
+            console.log('[Draw] Setting showDrawConfirmation to true (opponent)');
             setShowDrawConfirmation(true);
             setShowDrawRequestSent(false); // Ensure requester modal is closed
           } else {
             // I'm the requester - show "waiting for response" modal
+            console.log('[Draw] Setting showDrawRequestSent to true (requester)');
             setShowDrawConfirmation(false);
             setShowDrawRequestSent(true);
           }
         };
 
         const handleDrawAccepted = (data: any) => {
-          // Draw accepted - show popup for 5 seconds, then redirect
-          console.log('[Tictactoe] Draw accepted, showing popup for 5 seconds', data);
+          // Draw accepted - new grid will be loaded, show loading message
+          isRedirectingRef.current = false; // Don't redirect - game continues
+          waitingForNewGridRef.current = true; // Set flag to track we're waiting for new grid
+          
+          // Store current grid categories to detect when they change
+          const gameState = data?.room?.gameState || (currentRoom?.gameState as any);
+          if (gameState) {
+            previousGridCategoriesRef.current = {
+              top: (gameState.topCategories as any[])?.map((c: any) => c.slug || c.name) || [],
+              left: (gameState.leftCategories as any[])?.map((c: any) => c.slug || c.name) || []
+            };
+          }
+          
           setShowDrawConfirmation(false);
           setShowDrawRequestSent(false); // Close requester's waiting modal
           setDrawRequested(null);
-          setShowDrawAccepted(true); // Show "Draw Accepted" popup
+          setShowDrawAccepted(true); // Show "Loading new grid..." popup
           
-          // Set timeout to close popup and redirect after 5 seconds (fallback if gameReset doesn't arrive)
+          // Fallback: Close modal after 3 seconds if not closed by gameStateUpdate
           setTimeout(() => {
-            console.log('[Tictactoe] 5 seconds elapsed, closing popup and redirecting to lobby');
-            isRedirectingRef.current = true; // Set flag to prevent loading screens
-            setShowDrawAccepted(false); // Close draw accepted popup
-            window.location.href = '/tictactoe-leagues';
-          }, 5000); // 5 seconds
+            if (waitingForNewGridRef.current) {
+              console.log('[Draw] Fallback: Closing modal after timeout');
+              waitingForNewGridRef.current = false;
+              setShowDrawAccepted(false);
+            }
+          }, 3000);
+          
+          // The modal will close automatically when gameStateUpdate is received with new grid
+          // No redirect - game continues with new grid
         };
 
         const handleDrawDeclined = (data: any) => {
@@ -390,7 +570,6 @@
             const newCurrentTurnUserId = data?.room?.currentTurnUserId;
             // If the current turn user is not me, close the modal
             if (newCurrentTurnUserId !== currentUserId) {
-              console.log('[Tictactoe] Turn changed - closing answer modal');
               setModalShouldClose(true);
               setModalOpen(false);
               setSearch("");
@@ -414,6 +593,129 @@
         socket.on('drawAccepted', handleDrawAccepted);
         socket.on('drawDeclined', handleDrawDeclined);
         
+        const handleOpponentDisconnected = (data: any) => {
+          const { disconnectedPlayer, winner } = data;
+          const isMe = winner === currentUserId;
+          
+          setDisconnectedPlayerName(disconnectedPlayer?.username || 'Opponent');
+          setIsWinner(isMe);
+          if (isMe) {
+            setWonByDisconnect(true);
+            wonByDisconnectRef.current = true; // Set ref as well
+          }
+        };
+        
+        socket.on('opponentDisconnected', handleOpponentDisconnected);
+        
+        // Rematch event handlers
+        const handleRematchRequested = (data: any) => {
+          console.log('[Rematch] ===== rematchRequested event received =====');
+          console.log('[Rematch] Event data:', JSON.stringify(data, null, 2));
+          console.log('[Rematch] Current socket connected:', socket?.connected);
+          console.log('[Rematch] Current socket id:', socket?.id);
+          console.log('[Rematch] Current userId:', currentUserId);
+          const { requesterName, requesterUserId } = data;
+          console.log('[Rematch] Requester:', requesterName, 'RequesterUserId:', requesterUserId);
+          
+          // Only show modal if this is not the requester
+          if (requesterUserId && requesterUserId === currentUserId) {
+            console.log('[Rematch] Ignoring rematch request - this is the requester');
+            return;
+          }
+          
+          console.log('[Rematch] Setting rematch modal to show for opponent');
+          // Set ref FIRST to prevent any useEffect from resetting state
+          rematchRequestPendingRef.current = true;
+          // Set requester name first
+          setRematchRequesterName(requesterName || 'Opponent');
+          // Set modal state immediately
+          setShowRematchModal(true);
+          console.log('[Rematch] Modal state set to true, ref set to true');
+        };
+
+        const handleRematchAccepted = (data: any) => {
+          // Rematch accepted - new game will start via gameStarted event
+          rematchRequestPendingRef.current = false; // Clear ref
+          setShowRematchModal(false);
+          setRematchRequested(false);
+          setRematchAvailable(false);
+          setRematchCountdown(0);
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+        };
+
+        const handleRematchDeclined = (data: any) => {
+          // Rematch declined - restore countdown to where it was when rematch was requested
+          rematchRequestPendingRef.current = false; // Clear ref
+          setShowRematchModal(false);
+          setRematchRequested(false);
+          // Restore the countdown value from when rematch was requested
+          const savedCountdown = rematchCountdownWhenRequestedRef.current;
+          if (savedCountdown > 0) {
+            setRematchAvailable(true);
+            setRematchCountdown(savedCountdown);
+            rematchCountdownWhenRequestedRef.current = 0; // Reset stored value
+          } else {
+            setRematchAvailable(false);
+            setRematchCountdown(0);
+          }
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+        };
+
+        const handleRematchCancelled = (data: any) => {
+          // Rematch cancelled (player left or timeout)
+          console.log('[Rematch] handleRematchCancelled called:', data);
+          rematchRequestPendingRef.current = false; // Clear ref
+          setShowRematchModal(false);
+          setRematchRequested(false);
+          // Restore the countdown value from when rematch was requested
+          const savedCountdown = rematchCountdownWhenRequestedRef.current;
+          if (savedCountdown > 0) {
+            setRematchAvailable(true);
+            setRematchCountdown(savedCountdown);
+            rematchCountdownWhenRequestedRef.current = 0; // Reset stored value
+          } else {
+            setRematchAvailable(false);
+            setRematchCountdown(0);
+          }
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+        };
+        
+        console.log('[Rematch] Setting up socket listeners for rematch events');
+        console.log('[Rematch] Socket state:', { 
+          connected: socket?.connected, 
+          id: socket?.id,
+          userId: currentUserId 
+        });
+        
+        // Verify listeners are being added
+        socket.on('rematchRequested', handleRematchRequested);
+        socket.on('rematchAccepted', handleRematchAccepted);
+        socket.on('rematchDeclined', handleRematchDeclined);
+        socket.on('rematchCancelled', handleRematchCancelled);
+        
+        // Test: Listen to all events to see if rematchRequested is being emitted
+        const testHandler = (eventName: string, ...args: any[]) => {
+          if (eventName === 'rematchRequested') {
+            console.log('[Rematch] TEST: Caught rematchRequested via wildcard listener:', args);
+          }
+        };
+        console.log('[Rematch] Socket listeners registered');
+        
+        // Also listen to custom window event from context for gameFinished
+        const handleGameFinishedCustom = (event: CustomEvent) => {
+          handleGameFinished(event.detail);
+        };
+        window.addEventListener('gameFinished', handleGameFinishedCustom as EventListener);
+        
         return () => {
           socket.off('gameReset', handleGameReset);
           socket.off('gameStateUpdate', handleGameStateUpdate);
@@ -428,8 +730,14 @@
           socket.off('drawRequested', handleDrawRequested);
           socket.off('drawAccepted', handleDrawAccepted);
           socket.off('drawDeclined', handleDrawDeclined);
+          socket.off('opponentDisconnected', handleOpponentDisconnected);
+          socket.off('rematchRequested', handleRematchRequested);
+          socket.off('rematchAccepted', handleRematchAccepted);
+          socket.off('rematchDeclined', handleRematchDeclined);
+          socket.off('rematchCancelled', handleRematchCancelled);
+          window.removeEventListener('gameFinished', handleGameFinishedCustom as EventListener);
         };
-      }, [isMultiplayer, socket, currentUserId, multiplayer, playersLoaded, allPlayers.length]); // Include all dependencies
+      }, [isMultiplayer, socket, currentUserId]); // Removed playersLoaded and allPlayers.length to prevent constant re-setup
 
       // Multiplayer: Request game state on mount
       useEffect(() => {
@@ -452,6 +760,105 @@
           setTimeout(requestGameState, 500);
         }
       }, [isMultiplayer, socket, currentUserId, currentRoom]);
+
+      // Rematch countdown timer
+      useEffect(() => {
+        if (!isMultiplayer || !rematchAvailable || rematchCountdown <= 0) {
+          if (rematchCountdown <= 0 && rematchAvailable) {
+            // Countdown expired - mark as expired and hide button
+            rematchExpiredRef.current = true;
+            setRematchAvailable(false);
+            setRematchRequested(false);
+          }
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+          return;
+        }
+
+        rematchCountdownRef.current = setInterval(() => {
+          setRematchCountdown((prev) => {
+            if (prev <= 1) {
+              // Countdown expired - mark as expired and hide button forever
+              rematchExpiredRef.current = true;
+              setRematchAvailable(false);
+              setRematchRequested(false);
+              if (rematchCountdownRef.current) {
+                clearInterval(rematchCountdownRef.current);
+                rematchCountdownRef.current = null;
+              }
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => {
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+        };
+      }, [isMultiplayer, rematchAvailable, rematchCountdown]);
+
+      // Trigger rematch countdown when game finishes (fallback)
+      useEffect(() => {
+        if (!isMultiplayer || !mpIsFinished || !currentRoom) return;
+        
+        // CRITICAL: Don't reset if rematch countdown has already expired
+        if (rematchExpiredRef.current) {
+          console.log('[Rematch] Rematch countdown already expired, not resetting');
+          return;
+        }
+        
+        // Only start if rematch is not already available (avoid duplicate starts)
+        if (!rematchAvailable && currentRoom.players.length >= 2) {
+          console.log('[Rematch] Game finished - starting rematch countdown. Players:', currentRoom.players.length);
+          // CRITICAL: Check ref FIRST - if rematch request is pending, don't touch modal state at all
+          if (rematchRequestPendingRef.current) {
+            console.log('[Rematch] useEffect - rematch request pending, skipping state reset');
+            // Still set rematchAvailable and countdown, but don't touch modal state
+            setRematchAvailable(true);
+            setRematchCountdown(20);
+            return;
+          }
+          
+          // Only reset rematchRequested if we're starting fresh (no modal showing and no pending request)
+          if (!showRematchModal && !rematchRequestPendingRef.current) {
+            setRematchRequested(false);
+          }
+          setRematchAvailable(true);
+          setRematchCountdown(20);
+        }
+      }, [isMultiplayer, mpIsFinished, currentRoom?.players.length, rematchAvailable, showRematchModal]);
+
+      // Debug: Track rematch modal state changes
+      useEffect(() => {
+        console.log('[Rematch] Modal state changed - showRematchModal:', showRematchModal, 'requesterName:', rematchRequesterName);
+        // Log stack trace to see what's changing it
+        if (showRematchModal === false && rematchRequesterName) {
+          console.trace('[Rematch] Modal was set to false - stack trace:');
+        }
+      }, [showRematchModal, rematchRequesterName]);
+
+      // Player leave detection for rematch
+      useEffect(() => {
+        if (!isMultiplayer || !rematchAvailable || !currentRoom) return;
+
+        // Check if player count dropped below 2
+        if (currentRoom.players.length < 2) {
+          rematchRequestPendingRef.current = false; // Clear ref
+          setRematchAvailable(false);
+          setRematchRequested(false);
+          setRematchCountdown(0);
+          setShowRematchModal(false);
+          if (rematchCountdownRef.current) {
+            clearInterval(rematchCountdownRef.current);
+            rematchCountdownRef.current = null;
+          }
+        }
+      }, [isMultiplayer, rematchAvailable, currentRoom?.players.length]);
 
       useEffect(() => {
         // Skip grid loading in multiplayer mode (grid comes from server)
@@ -549,7 +956,6 @@
         setSuggestions(filteredSuggestions);
         setShowSuggestions(filteredSuggestions.length > 0);
         
-        console.log(`💡 Generated ${filteredSuggestions.length} suggestions for: "${search}"`);
       }, [search, allPlayers, modalOpen, activePair]);
 
       // Reset modalShouldClose flag when modal closes
@@ -570,11 +976,6 @@
           
           if (hasNoGameState && wasPlaying && currentRoom.players.length > 0) {
             // Room was reset from playing state to waiting - redirect to lobby
-            console.log('[Tictactoe] Room reset detected - redirecting to lobby', {
-              status: currentRoom.status,
-              hasGameState: !!mpGameState,
-              playersCount: currentRoom.players.length
-            });
             isRedirectingRef.current = true; // Set flag to prevent loading screens
             const redirectTimer = setTimeout(() => {
               window.location.href = '/tictactoe-leagues';
@@ -606,7 +1007,6 @@
         setPlayers(filteredPlayers);
         setPlayersLoading(false);
         
-        console.log(`🔍 Filtered ${filteredPlayers.length} players for search: "${search}"`);
       }, [modalOpen, search, activePair, allPlayers]);
 
       // Timer effect: start/reset on turn change, but only if dataReady (single-player only)
@@ -647,7 +1047,6 @@
         
         // If modal is open but it's no longer player's turn, close the modal
         if (modalOpen && !mpIsMyTurn) {
-          console.log('[Tictactoe] Turn changed - closing answer modal (useEffect)');
           setModalShouldClose(true);
           setModalOpen(false);
           setSearch("");
@@ -686,19 +1085,164 @@
       const player1CurrentScore = isMultiplayer ? (mpScores[currentRoom?.players.find(p => (p as any)?.symbol === 'X')?.userId || ''] || 0) : player1Score;
       const player2CurrentScore = isMultiplayer ? (mpScores[currentRoom?.players.find(p => (p as any)?.symbol === 'O')?.userId || ''] || 0) : player2Score;
 
+      // Don't show opponent left modal - let the game over screen handle it with the disconnect message
+
+      // Show leave confirmation modal
+      if (showLeaveConfirmation) {
+        return (
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-gradient-to-b from-[#111827] to-black relative">
+            {/* Modal Overlay */}
+            <div className="absolute inset-0 bg-black/80 z-40"></div>
+            
+            {/* Modal Content */}
+            <div className="relative z-50 bg-[#262346] rounded-lg p-8 max-w-md w-full mx-4">
+              <div className="text-center mb-6">
+                <div className="text-6xl mb-4">⚠️</div>
+                <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Leave Game?</h2>
+                <p className="text-white/80">
+                  Are you sure you want to quit this game? Your opponent will win automatically.
+                </p>
+              </div>
+              
+              <div className="flex gap-4">
+                <button
+                  onClick={async () => {
+                    setShowLeaveConfirmation(false);
+                    if (mpLeaveRoom) {
+                      await mpLeaveRoom();
+                    }
+                    window.location.href = '/';
+                  }}
+                  className="flex-1 bg-red-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-600 transition-colors"
+                >
+                  Yes, Leave Game
+                </button>
+                <button
+                  onClick={() => setShowLeaveConfirmation(false)}
+                  className="flex-1 bg-gray-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // Multiplayer: Show winner screen if series is finished
       if (isMultiplayer && mpIsFinished && mpSeriesWinner) {
         const winnerName = currentRoom?.players.find(p => p.userId === mpSeriesWinner)?.username || 'Winner';
         
         return (
-          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-gradient-to-b from-[#111827] to-black">
+          <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-gradient-to-b from-[#111827] to-black relative">
+            {/* Rematch Request Modal - Render on top of game over screen */}
+            {showRematchModal && rematchRequesterName && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+                <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
+                  <h2 className="text-2xl font-bold mb-4">Rematch Request</h2>
+                  <p className="mb-6">
+                    <span className="font-semibold">{rematchRequesterName}</span> requested a rematch!
+                  </p>
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={async () => {
+                        if (socket && currentUserId) {
+                          setShowRematchModal(false);
+                          socket.emit('acceptRematch', { userId: currentUserId });
+                        }
+                      }}
+                      className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (socket && currentUserId) {
+                          setShowRematchModal(false);
+                          socket.emit('declineRematch', { userId: currentUserId });
+                        }
+                      }}
+                      className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Draw Request Confirmation Modal (for opponent) - Render on top of game over screen */}
+            {showDrawConfirmation && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+                <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
+                  <h2 className="text-2xl font-bold mb-4">Draw Request</h2>
+                  <p className="mb-6">
+                    {drawRequested === 'X' ? 'Player 1' : 'Player 2'} has requested a draw. Do you want to accept?
+                  </p>
+                  <div className="flex gap-4 justify-center">
+                    <button
+                      onClick={() => handleDrawConfirmation(true)}
+                      className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => handleDrawConfirmation(false)}
+                      className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Draw Request Sent Modal (for requester) - Render on top of game over screen */}
+            {showDrawRequestSent && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+                <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
+                  <h2 className="text-2xl font-bold mb-4">Draw Request Sent</h2>
+                  <p className="mb-6">
+                    Your draw request has been sent. Waiting for opponent's response...
+                  </p>
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Draw Accepted Modal (shown while loading new grid) - Render on top of game over screen */}
+            {showDrawAccepted && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+                <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
+                  <h2 className="text-2xl font-bold mb-4">Draw Accepted</h2>
+                  <p className="mb-6">
+                    Both players have agreed to a draw. Loading new grid...
+                  </p>
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <h2 className="text-2xl font-bold">🎉 Game Over</h2>
             
             <div className="text-center">
               <p className="text-lg text-white/80">
-                {mpSeriesWinner === currentUserId 
-                  ? '🏆 Congratulations! You won the series!' 
-                  : `🏆 Series Winner: ${winnerName}`}
+                {(() => {
+                  const isWinner = mpSeriesWinner === currentUserId;
+                  const isDisconnectWin = wonByDisconnect || wonByDisconnectRef.current;
+                  
+                  if (isWinner) {
+                    return isDisconnectWin
+                      ? '🏆 Congratulations! You won the series due to other player disconnecting mid game!'
+                      : '🏆 Congratulations! You won the series!';
+                  } else {
+                    return `🏆 Series Winner: ${winnerName}`;
+                  }
+                })()}
               </p>
               {mpGameWins && mpSeriesWinner && (
                 <p className="text-sm text-white/60 mt-1">
@@ -726,11 +1270,56 @@
               </div>
             )}
 
-            <div className="flex gap-4 mt-4">
+            <div className="flex gap-4 mt-4 flex-wrap justify-center">
+              {rematchAvailable && rematchCountdown > 0 && !rematchRequested && (
+                <button
+                  onClick={async () => {
+                    if (socket && currentUserId) {
+                      console.log('[Rematch] Rematch button clicked. Emitting rematchRequest event');
+                      console.log('[Rematch] Socket connected:', socket.connected);
+                      console.log('[Rematch] Socket id:', socket.id);
+                      // Store current countdown value before requesting rematch
+                      rematchCountdownWhenRequestedRef.current = rematchCountdown;
+                      setRematchRequested(true);
+                      
+                      // Listen for error response
+                      const errorHandler = (error: any) => {
+                        console.error('[Rematch] Error from server:', error);
+                        setRematchRequested(false);
+                        // Restore countdown on error
+                        const savedCountdown = rematchCountdownWhenRequestedRef.current;
+                        if (savedCountdown > 0) {
+                          setRematchCountdown(savedCountdown);
+                          rematchCountdownWhenRequestedRef.current = 0;
+                        }
+                      };
+                      socket.once('error', errorHandler);
+                      
+                      socket.emit('rematchRequest', { userId: currentUserId });
+                      console.log('[Rematch] rematchRequest event emitted');
+                      
+                      // Remove error handler after 5 seconds
+                      setTimeout(() => {
+                        socket.off('error', errorHandler);
+                      }, 5000);
+                    }
+                  }}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+                >
+                  Rematch ({rematchCountdown}s)
+                </button>
+              )}
+              {rematchRequested && (
+                <button
+                  disabled
+                  className="px-6 py-2 bg-green-600/50 text-white rounded-lg font-semibold cursor-not-allowed"
+                >
+                  Waiting for response...
+                </button>
+              )}
               <button
                 onClick={async () => {
                   try {
-                    console.log('🔄 [Tictactoe] New Game button clicked - resetting game and removing all players...');
                     if (mpResetGame) {
                       await mpResetGame();
                       // The gameReset event will handle redirect, but fallback here just in case
@@ -885,33 +1474,13 @@
           
           const currentCells = mpCellStates || cellStates;
           if (currentCells[row]?.[col]?.locked) {
-            console.log('❌ [Frontend] Cell is already locked:', { row, col });
             return;
           }
-          console.log('🎯 [Frontend] Clicking cell in multiplayer mode:', {
-            row,
-            col,
-            currentUserId,
-            hasClickTictactoeCell: !!clickTictactoeCell,
-            mpIsMyTurn,
-            playersLoaded,
-            playersCount: allPlayers.length,
-            socketId: socket?.id,
-            socketConnected: socket?.connected
-          });
 
           // Try to open modal directly as fallback
           const topCat = mpTopCategories[col];
           const leftCat = mpLeftCategories[row];
           if (topCat && leftCat && playersLoaded && allPlayers.length > 0) {
-            console.log('🔄 [Frontend] Opening modal directly as fallback');
-            // Find and log correct answers for multiplayer mode
-            console.log('🔍 [Frontend] Looking for pair:', {
-              topCat: topCat.name,
-              leftCat: leftCat.name,
-              mpPairsLength: mpPairs?.length || 0,
-              mpPairs: mpPairs
-            });
             const pair = mpPairs?.find(
               (p: { categories: string[]; players: string[] }) => 
                 (p.categories[0] === topCat.name && p.categories[1] === leftCat.name) ||
@@ -1024,26 +1593,11 @@
         
         // Multiplayer: Use multiplayer submit handler
         if (isMultiplayer) {
-          console.log('🎮 [Frontend] handlePlayerSelect - multiplayer mode:', {
-            hasSubmitTictactoeAnswer: !!submitTictactoeAnswer,
-            mpIsMyTurn,
-            activeCell,
-            playerName
-          });
           
           if (!submitTictactoeAnswer) {
             console.error('❌ [Frontend] submitTictactoeAnswer not available!');
             return;
           }
-          
-          // Always submit the answer - let backend handle turn validation
-          // This allows the player to see if their answer was correct even if turn changed
-          console.log('✅ [Frontend] Submitting answer in multiplayer mode:', { 
-            playerName, 
-            row: activeCell.row, 
-            col: activeCell.col,
-            isMyTurn: mpIsMyTurn
-          });
           
           // Store cell info in ref before clearing for comparison
           const submittedCell = { row: activeCell.row, col: activeCell.col };
@@ -1194,10 +1748,6 @@
           if (!mpIsMyTurn) return;
           if (mpIsDrawPending) return;
 
-          console.log('🎮 [Frontend] Requesting draw in multiplayer mode', {
-            userId: currentUserId,
-            roomId: currentRoom?.roomId,
-          });
           socket.emit('requestDraw', { userId: currentUserId });
           return;
         }
@@ -1215,10 +1765,6 @@
     if (isMultiplayer) {
       if (!socket || !currentUserId) return;
 
-      console.log('🎮 [Frontend] Responding to draw request', {
-        userId: currentUserId,
-        accept: confirmed,
-      });
       socket.emit('respondDraw', { userId: currentUserId, accept: confirmed });
 
       // Close local confirmation; backend events will handle further UI
@@ -1511,9 +2057,15 @@
           )}
 
                 {/* Draw Request Confirmation Modal (for opponent) */}
+      {(() => {
+        if (showDrawConfirmation) {
+          console.log('[Draw] Rendering draw confirmation modal. drawRequested:', drawRequested);
+        }
+        return null;
+      })()}
       {showDrawConfirmation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
-          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
             <h2 className="text-2xl font-bold mb-4">Draw Request</h2>
             <p className="mb-6">
               {drawRequested === 'X' ? 'Player 1' : 'Player 2'} has requested a draw. Do you want to accept?
@@ -1538,8 +2090,8 @@
 
       {/* Draw Request Sent Modal (for requester) */}
       {showDrawRequestSent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
-          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
             <h2 className="text-2xl font-bold mb-4">Draw Request Sent</h2>
             <p className="mb-6">
               Your draw request has been sent. Waiting for opponent's response...
@@ -1571,13 +2123,13 @@
         </div>
       )}
 
-      {/* Draw Accepted Modal (shown for 5 seconds before redirect) */}
+      {/* Draw Accepted Modal (shown while loading new grid) */}
       {showDrawAccepted && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm">
-          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
             <h2 className="text-2xl font-bold mb-4">Draw Accepted</h2>
             <p className="mb-6">
-              Both players have agreed to a draw. Redirecting to lobby screen...
+              Both players have agreed to a draw. Loading new grid...
             </p>
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
@@ -1603,6 +2155,42 @@
                 className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
               >
                 No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rematch Request Modal */}
+      {showRematchModal && rematchRequesterName && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm" style={{ zIndex: 10000 }}>
+          <div className="bg-white text-black rounded-xl p-8 max-w-md w-full text-center shadow-2xl relative z-[101]">
+            <h2 className="text-2xl font-bold mb-4">Rematch Request</h2>
+            <p className="mb-6">
+              <span className="font-semibold">{rematchRequesterName}</span> requested a rematch!
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={async () => {
+                  if (socket && currentUserId) {
+                    setShowRematchModal(false);
+                    socket.emit('acceptRematch', { userId: currentUserId });
+                  }
+                }}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                Accept
+              </button>
+              <button
+                onClick={async () => {
+                  if (socket && currentUserId) {
+                    setShowRematchModal(false);
+                    socket.emit('declineRematch', { userId: currentUserId });
+                  }
+                }}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                Decline
               </button>
             </div>
           </div>

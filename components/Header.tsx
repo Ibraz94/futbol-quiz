@@ -6,6 +6,7 @@ import { UserRound } from "lucide-react";
 import Nav from "./Nav";
 import MobileNav from "./MobileNav";
 import Image from "next/image";
+import GameAwareLink from "./GameAwareLink";
 
 
 const Header = () => {
@@ -27,7 +28,7 @@ const Header = () => {
     <header className="py-4 sm:py-6 xl:py-4 text-white border-b border-[#FFFFFF] border-opacity-20">
       <div className="container mx-auto flex justify-between items-center px-4 sm:px-6 lg:px-8">
         {/* Logo Section */}
-        <Link href="/">
+        <GameAwareLink href="/">
           <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-semibold flex items-center gap-1 sm:gap-2">
             <span>
               <Image
@@ -41,7 +42,7 @@ const Header = () => {
             <span className="hidden xs:inline sm:inline">Futbol Quiz</span>
             <span className="xs:hidden sm:hidden">Futbol Quiz</span>
           </h1>
-        </Link>
+        </GameAwareLink>
 
         {/* Desktop Nav - Hidden on mobile/tablet */}
         <div className="hidden xl:block">

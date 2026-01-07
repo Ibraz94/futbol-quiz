@@ -87,6 +87,11 @@ const BingoGame: React.FC = () => {
   const [timeoutNotification, setTimeoutNotification] = useState<{ username: string; penalty: number; consecutiveTimeouts: number } | null>(null);
   const [isStartingNewGameFromWinner, setIsStartingNewGameFromWinner] = useState<boolean>(false);
   const [isLeavingRoom, setIsLeavingRoom] = useState<boolean>(false);
+  const [showOpponentLeftModal, setShowOpponentLeftModal] = useState<boolean>(false);
+  const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string>('');
+  const [isWinner, setIsWinner] = useState<boolean>(false);
+  const [wonByDisconnect, setWonByDisconnect] = useState<boolean>(false);
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState<boolean>(false);
   
   // Get user ID from JWT token
   const getUserIdFromToken = (): string | null => {
@@ -241,6 +246,39 @@ const BingoGame: React.FC = () => {
       multiplayer.socket?.off('timerUpdate', handleTimerUpdate);
     };
   }, [isMultiplayer, multiplayer.socket]);
+
+  // Listen for forced leave room requests from navigation (when context not available)
+  useEffect(() => {
+    if (!leaveRoom) return;
+    
+    const handleForceLeave = (event: CustomEvent) => {
+      console.log('[Bingo] Force leave room requested from navigation:', event.detail);
+      if (leaveRoom) {
+        leaveRoom();
+      }
+    };
+    
+    window.addEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+    return () => window.removeEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+  }, [leaveRoom]);
+
+  // Listen for opponent disconnect event
+  useEffect(() => {
+    const handleOpponentDisconnected = (event: CustomEvent) => {
+      const { disconnectedPlayer, winner } = event.detail;
+      const isMe = winner === authenticatedUserId;
+      
+      setDisconnectedPlayerName(disconnectedPlayer?.username || 'Opponent');
+      setIsWinner(isMe);
+      if (isMe) {
+        setWonByDisconnect(true);
+      }
+      setGameEnded(true); // Mark game as ended
+    };
+
+    window.addEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+    return () => window.removeEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+  }, [authenticatedUserId]);
 
   // Start countdown timer when game starts (fallback for non-server updates)
   useEffect(() => {
@@ -681,6 +719,44 @@ const BingoGame: React.FC = () => {
 
   const allCellsLocked = isGameWon(currentGrid, lockedCells);
 
+  // Show leave confirmation modal
+  if (showLeaveConfirmation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118] relative">
+        <div className="absolute inset-0 bg-black/80 z-40"></div>
+        <div className="relative z-50 bg-[#262346] rounded-lg p-8 max-w-md w-full mx-4">
+          <div className="text-center mb-6">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Leave Game?</h2>
+            <p className="text-white/80">
+              Are you sure you want to quit this game? Your opponent will win automatically.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={async () => {
+                setShowLeaveConfirmation(false);
+                if (leaveRoom) {
+                  await leaveRoom();
+                }
+                window.location.href = '/';
+              }}
+              className="flex-1 bg-red-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Yes, Leave Game
+            </button>
+            <button
+              onClick={() => setShowLeaveConfirmation(false)}
+              className="flex-1 bg-gray-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Check if game should end or show error
   // Only show game over if we're in multiplayer mode and the game has actually ended
   const shouldEndGame = isMultiplayer && currentRoom?.status === 'finished';
@@ -761,6 +837,9 @@ const BingoGame: React.FC = () => {
       </div>
     );
   }
+
+  // Show opponent left modal
+  // Don't show opponent left modal - let the game over screen handle it with the disconnect message
   
   if (shouldEndGame) {
     if (intervalId) clearInterval(intervalId);
@@ -774,7 +853,9 @@ const BingoGame: React.FC = () => {
         <div className="text-center">
           <p className="text-lg text-white/80">
             {currentRoom?.gameState?.winner === currentUserId ? 
-              '🏆 Congratulations! You won!' : 
+              (wonByDisconnect 
+                ? '🏆 Congratulations! You won due to other player disconnecting mid game!' 
+                : '🏆 Congratulations! You won!') : 
               `🏆 Winner: ${currentRoom?.players.find(p => p.userId === currentRoom?.gameState?.winner)?.username || 'Unknown'}`
             }
           </p>

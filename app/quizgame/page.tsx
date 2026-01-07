@@ -65,6 +65,11 @@ const QuizGame: React.FC = () => {
   const [isResettingGame, setIsResettingGame] = useState<boolean>(false);
   const [isLeavingRoom, setIsLeavingRoom] = useState<boolean>(false);
   const [isStartingNewGameFromWinner, setIsStartingNewGameFromWinner] = useState<boolean>(false);
+  const [showOpponentLeftModal, setShowOpponentLeftModal] = useState<boolean>(false);
+  const [disconnectedPlayerName, setDisconnectedPlayerName] = useState<string>('');
+  const [isWinner, setIsWinner] = useState<boolean>(false);
+  const [wonByDisconnect, setWonByDisconnect] = useState<boolean>(false);
+  const [showLeaveConfirmation, setShowLeaveConfirmation] = useState<boolean>(false);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const timerInterval = useRef<NodeJS.Timeout | null>(null);
@@ -173,6 +178,39 @@ const QuizGame: React.FC = () => {
       }
     }
   }, [currentRoom?.status, (currentRoom?.gameState as any)?.currentPlayerIndex]);
+
+  // Listen for forced leave room requests from navigation (when context not available)
+  useEffect(() => {
+    if (!leaveRoom) return;
+    
+    const handleForceLeave = (event: CustomEvent) => {
+      console.log('[Quiz] Force leave room requested from navigation:', event.detail);
+      if (leaveRoom) {
+        leaveRoom();
+      }
+    };
+    
+    window.addEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+    return () => window.removeEventListener('mp_forceLeaveRoom', handleForceLeave as EventListener);
+  }, [leaveRoom]);
+
+  // Listen for opponent disconnect event
+  useEffect(() => {
+    const handleOpponentDisconnected = (event: CustomEvent) => {
+      const { disconnectedPlayer, winner } = event.detail;
+      const isMe = winner === currentUserId;
+      
+      setDisconnectedPlayerName(disconnectedPlayer?.username || 'Opponent');
+      setIsWinner(isMe);
+      if (isMe) {
+        setWonByDisconnect(true);
+      }
+      setShowGameOver(true); // Show game over screen
+    };
+
+    window.addEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+    return () => window.removeEventListener('opponentDisconnected', handleOpponentDisconnected as EventListener);
+  }, [currentUserId]);
 
   // Start local timer only for non-multiplayer or pre-game; when playing, rely on server timer
   useEffect(() => {
@@ -438,6 +476,84 @@ const QuizGame: React.FC = () => {
     );
   }
 
+  // Don't show opponent left modal - let the game over screen handle it with the disconnect message
+
+  // Show leave confirmation modal
+  if (showLeaveConfirmation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118] relative">
+        <div className="absolute inset-0 bg-black/80 z-40"></div>
+        <div className="relative z-50 bg-[#262346] rounded-lg p-8 max-w-md w-full mx-4">
+          <div className="text-center mb-6">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Leave Game?</h2>
+            <p className="text-white/80">
+              Are you sure you want to quit this game? Your opponent will win automatically.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={async () => {
+                setShowLeaveConfirmation(false);
+                if (leaveRoom) {
+                  await leaveRoom();
+                }
+                window.location.href = '/';
+              }}
+              className="flex-1 bg-red-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Yes, Leave Game
+            </button>
+            <button
+              onClick={() => setShowLeaveConfirmation(false)}
+              className="flex-1 bg-gray-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show leave confirmation modal
+  if (showLeaveConfirmation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white flex-col gap-4 bg-[#0e1118] relative">
+        <div className="absolute inset-0 bg-black/80 z-40"></div>
+        <div className="relative z-50 bg-[#262346] rounded-lg p-8 max-w-md w-full mx-4">
+          <div className="text-center mb-6">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-[#ffd600] mb-2">Leave Game?</h2>
+            <p className="text-white/80">
+              Are you sure you want to quit this game? Your opponent will win automatically.
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={async () => {
+                setShowLeaveConfirmation(false);
+                if (leaveRoom) {
+                  await leaveRoom();
+                }
+                window.location.href = '/';
+              }}
+              className="flex-1 bg-red-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-red-600 transition-colors"
+            >
+              Yes, Leave Game
+            </button>
+            <button
+              onClick={() => setShowLeaveConfirmation(false)}
+              className="flex-1 bg-gray-500 text-white font-semibold py-3 px-4 rounded-md hover:bg-gray-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show game over screen
   if (showGameOver) {
     return (
@@ -448,7 +564,9 @@ const QuizGame: React.FC = () => {
         <div className="text-center">
           <p className="text-lg text-white/80">
             {currentRoom?.gameState?.winner === currentUserId ? 
-              '🏆 Congratulations! You won!' : 
+              (wonByDisconnect 
+                ? '🏆 Congratulations! You won due to other player disconnecting mid game!' 
+                : '🏆 Congratulations! You won!') : 
               `🏆 Winner: ${currentRoom?.players.find(p => p.userId === currentRoom?.gameState?.winner)?.username || 'Unknown'}`
             }
           </p>
@@ -637,8 +755,8 @@ const QuizGame: React.FC = () => {
               <div className="text-center">
                 <p className="text-white/70 text-sm">Room ID: <span className="text-[#ffd600] font-mono">{currentRoom.roomId}</span></p>
                 <div className="flex items-center justify-center gap-2 mt-1">
-                  <p className="text-white/70 text-sm">Players: {currentRoom.players.length}/4</p>
-                  {currentRoom.players.length >= 4 && (
+                  <p className="text-white/70 text-sm">Players: {currentRoom.players.length}/2</p>
+                  {currentRoom.players.length >= 2 && (
                     <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30">
                       FULL
                     </span>
@@ -649,18 +767,16 @@ const QuizGame: React.FC = () => {
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-white/60 mb-1">
                     <span>Room Capacity</span>
-                    <span>{Math.round((currentRoom.players.length / 4) * 100)}%</span>
+                    <span>{Math.round((currentRoom.players.length / 2) * 100)}%</span>
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
                     <div 
                       className={`h-2 rounded-full transition-all duration-300 ${
-                        currentRoom.players.length >= 4 
+                        currentRoom.players.length >= 2 
                           ? 'bg-red-500' 
-                          : currentRoom.players.length >= 3 
-                            ? 'bg-yellow-500' 
-                            : 'bg-green-500'
+                          : 'bg-green-500'
                       }`}
-                      style={{ width: `${(currentRoom.players.length / 4) * 100}%` }}
+                      style={{ width: `${(currentRoom.players.length / 2) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -668,7 +784,7 @@ const QuizGame: React.FC = () => {
                 {currentRoom.players.length === 1 && (
                   <p className="text-[#ffd600] text-sm font-medium mt-2">🎯 You are the host! Wait for other players to join.</p>
                 )}
-                {currentRoom.players.length >= 4 && (
+                {currentRoom.players.length >= 2 && (
                   <p className="text-red-400 text-sm font-medium mt-2">⚠️ Room is full! No more players can join.</p>
                 )}
               </div>
