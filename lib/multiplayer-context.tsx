@@ -103,7 +103,7 @@ interface MultiplayerContextType {
   submitAnswer: (answer: string) => Promise<void>;
   skipQuestion: () => Promise<void>;
   // Team game methods
-  submitTeamAnswer: (playerName: string, team1: string, team2: string) => Promise<void>;
+  submitTeamAnswer: (playerName: string) => Promise<void>;
   
   // TicTacToe game methods
   clickTictactoeCell: (row: number, col: number) => Promise<void>;
@@ -389,7 +389,24 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
         }));
       }
     });
-    sock.on('error', (data) => { console.error('❌ Multiplayer error:', data.message); setError(data.message); });
+    sock.on('error', (data) => { 
+      // Don't show "Room not found" error if user hasn't joined a room yet (normal state on lobby page)
+      // Check localStorage to see if user was in a room - if not, this is expected
+      if (data.message === 'Room not found') {
+        const savedRoomId = typeof window !== 'undefined' ? localStorage.getItem('mp_currentRoomId') : null;
+        if (!savedRoomId) {
+          // User wasn't in a room - this is expected, don't show error
+          console.log('ℹ️ Room not found (expected - user not in a room yet)');
+          return;
+        }
+        // User was in a room but it's gone - this might be an actual error, but clear the saved room ID
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('mp_currentRoomId');
+        }
+      }
+      console.error('❌ Multiplayer error:', data.message); 
+      setError(data.message); 
+    });
   }, [setCurrentRoom]);
 
   const connect = useCallback(async () => {
@@ -507,12 +524,16 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
       
       // Request game state after connection if we don't have a room yet (important for redirects)
       if (!currentRoom && currentUserId && normalizedNamespace === '/team-multiplayer') {
-        setTimeout(() => {
-          if (newSocket.connected && currentUserId) {
-            console.log('📡 [connect] Requesting game state after new connection', { userId: currentUserId, namespace: normalizedNamespace });
-            newSocket.emit('getGameState', { userId: currentUserId });
-          }
-        }, 100);
+        // Only request game state if user might have been in a room
+        const savedRoomId = localStorage.getItem('mp_currentRoomId');
+        if (savedRoomId) {
+          setTimeout(() => {
+            if (newSocket.connected && currentUserId) {
+              console.log('📡 [connect] Requesting game state after new connection', { userId: currentUserId, namespace: normalizedNamespace });
+              newSocket.emit('getGameState', { userId: currentUserId });
+            }
+          }, 100);
+        }
       }
     });
 
@@ -745,6 +766,20 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     });
 
     newSocket.on('error', (data) => {
+      // Don't show "Room not found" error if user hasn't joined a room yet (normal state on lobby page)
+      // Check localStorage to see if user was in a room - if not, this is expected
+      if (data.message === 'Room not found') {
+        const savedRoomId = typeof window !== 'undefined' ? localStorage.getItem('mp_currentRoomId') : null;
+        if (!savedRoomId) {
+          // User wasn't in a room - this is expected, don't show error
+          console.log('ℹ️ Room not found (expected - user not in a room yet)');
+          return;
+        }
+        // User was in a room but it's gone - this might be an actual error, but clear the saved room ID
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('mp_currentRoomId');
+        }
+      }
       console.error('❌ Multiplayer error:', data.message);
       setError(data.message);
     });
@@ -990,15 +1025,13 @@ export const MultiplayerProvider: React.FC<MultiplayerProviderProps> = ({ childr
     socketRef.current.emit('skipQuestion', { userId: currentUserId });
   };
 
-  const submitTeamAnswer = async (playerName: string, team1: string, team2: string): Promise<void> => {
+  const submitTeamAnswer = async (playerName: string): Promise<void> => {
     if (!socketRef.current?.connected || !currentRoom || !currentUserId) {
       throw new Error('Cannot submit answer: not connected or no room');
     }
     socketRef.current.emit('submitAnswer', {
       userId: currentUserId,
       playerName: playerName?.trim(),
-      team1,
-      team2,
     });
   };
 
